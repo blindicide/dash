@@ -17,6 +17,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # actions/checkout re-fetches the pushed tag ref without its tag object, so an annotated
+      # tag shows up locally as lightweight (v1.0.0's release run failed on exactly that).
+      - name: fetch the tag object
+        run: git fetch --force --no-tags origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
       - name: require an annotated tag
         run: |
           test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag || { echo "::error::$GITHUB_REF_NAME is not an annotated tag"; exit 1; }
