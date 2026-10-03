@@ -86,7 +86,11 @@ up() {
     echo "build the frontend first: npm run build" >&2
     exit 1
   fi
-  ln -sfn "$ROOT/plugin" "$HOME_DIR/plugins/dash"
+  # A real directory here is a packaged install (install.sh --hermes-home "$HOME_DIR") under
+  # test; keep it. Otherwise serve the working tree's plugin.
+  if [[ -L "$HOME_DIR/plugins/dash" || ! -e "$HOME_DIR/plugins/dash" ]]; then
+    ln -sfn "$ROOT/plugin" "$HOME_DIR/plugins/dash"
+  fi
 
   cat >"$HOME_DIR/config.yaml" <<YAML
 model:
