@@ -185,6 +185,11 @@ export function useDash(): DashController {
     }
     await reloadMessages(p, view.sessionId, myGen);
     if (gen.current !== myGen) return;
+    // Hermes may have generated a title during the turn.
+    void api.session(p, view.sessionId).then(
+      (res) => gen.current === myGen && currentRef.current === view.sessionId && setCurrent(res.session),
+      () => undefined,
+    );
     // Keep the settled live view only if the transcript did not load (e.g. offline).
     setRun((prev) => (prev && prev.runId === view.runId && TERMINAL.has(prev.status) ? null : prev));
     streamRef.current?.close();
