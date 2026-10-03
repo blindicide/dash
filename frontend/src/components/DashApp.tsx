@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDash } from "../hooks/useDash";
-import { supportsStreaming } from "../lib/api";
+import { api, supportsStreaming } from "../lib/api";
+import type { ModelChoice, ModelChoices } from "../lib/types";
 import { isActive } from "../lib/runState";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -66,7 +67,26 @@ export function DashApp() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hermesOpen, setHermesOpen] = useState(false);
+  const [models, setModels] = useState<ModelChoices | null>(null);
+  const [model, setModel] = useState<ModelChoice | null>(null);
   useFillHeight(root, !d.booting && !d.bootError);
+
+  // Model choices are per profile; a switch drops the previous profile's selection.
+  const modelOptions = d.caps?.hermes.model_options ?? false;
+  const pqs = d.pqs;
+  useEffect(() => {
+    let live = true;
+    if (!modelOptions) return;
+    api.modelChoices(pqs).then(
+      (r) => live && setModels(r),
+      () => live && setModels(null),
+    );
+    return () => {
+      live = false;
+      setModel(null);
+      setModels(null);
+    };
+  }, [modelOptions, pqs]);
 
   const closeOnMobile = useCallback(() => setSidebarOpen(false), []);
 
@@ -206,6 +226,9 @@ export function DashApp() {
             online={d.online}
             enterToSend={d.prefs.enter_to_send}
             onSend={d.send}
+            models={modelOptions ? models : null}
+            model={model}
+            onModel={setModel}
             onStop={() => void d.stop()}
             onError={(text) => d.setNotice({ kind: "warning", text })}
           />

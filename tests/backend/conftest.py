@@ -175,6 +175,8 @@ class FakeHermes:
                 "status": "running",
                 "session_id": body.get("session_id"),
                 "input": body.get("input"),
+                "provider": body.get("provider"),
+                "model": body.get("model"),
             }
             if key:
                 self.idem[key] = rid
@@ -264,7 +266,30 @@ class FakeHermes:
                 },
             )
         if path == "/api/model/options":
-            return httpx.Response(200, json={"current": {"model": "m"}, "options": []})
+            return httpx.Response(
+                200,
+                json={
+                    "model": "m",
+                    "provider": "custom",
+                    "providers": [
+                        {
+                            "slug": "custom",
+                            "name": "Custom",
+                            "is_current": True,
+                            "authenticated": True,
+                            "models": ["m"],
+                        },
+                        {
+                            "slug": "anthropic",
+                            "name": "Anthropic",
+                            "is_current": False,
+                            "authenticated": True,
+                            "models": ["claude-x"],
+                        },
+                        {"slug": "nous", "name": "Nous", "is_current": False, "authenticated": False, "models": ["n1"]},
+                    ],
+                },
+            )
         return httpx.Response(404, json={"error": {"message": "nope"}})
 
 

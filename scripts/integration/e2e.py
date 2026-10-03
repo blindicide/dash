@@ -530,6 +530,39 @@ def t_profiles():
     }
 
 
+@check("per-message model override is limited to Hermes-offered models and honoured by the run")
+def t_model():
+    with browser() as c:
+        choices = c.get(f"{P}/models/choices").json()
+        assert choices["available"] and any(
+            p["provider"] == "custom" and "scripted" in p["models"] for p in choices["providers"]
+        ), choices
+        sid = c.post(f"{P}/sessions", json={}, headers=MUT).json()["session"]["id"]
+        bad = c.post(
+            f"{P}/runs",
+            json={
+                "session_id": sid,
+                "text": "x",
+                "client_request_id": str(uuid.uuid4()),
+                "model": {"provider": "custom", "model": "not-offered"},
+            },
+            headers=MUT,
+        )
+        body = {
+            "session_id": sid,
+            "text": "model override probe",
+            "client_request_id": str(uuid.uuid4()),
+            "model": {"provider": "custom", "model": "scripted"},
+        }
+        r = c.post(f"{P}/runs", json=body, headers=MUT)
+        assert r.status_code == 202, r.text
+        evs = sse_events(c, r.json()["run_id"])
+    final = terminal(evs)
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "unknown_model", bad.text
+    assert final["status"] == "completed" and final.get("runtime", {}).get("provider") == "custom", final
+    return {"runtime": final.get("runtime"), "rejected": bad.json()["error"]["code"]}
+
+
 ALL = [
     t_auth,
     t_status,
@@ -548,6 +581,7 @@ ALL = [
     t_bot,
     t_state,
     t_profiles,
+    t_model,
 ]
 
 

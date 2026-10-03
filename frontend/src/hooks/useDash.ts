@@ -20,6 +20,7 @@ import type {
   Capabilities,
   ImageAttachment,
   Message,
+  ModelChoice,
   Preferences,
   ProfileItem,
   Session,
@@ -64,7 +65,7 @@ export interface DashController {
   openSession: (id: string | null) => Promise<void>;
   newChat: () => void;
   openBotChat: () => Promise<void>;
-  send: (text: string, images: ImageAttachment[], uploads: UploadRef[]) => Promise<boolean>;
+  send: (text: string, images: ImageAttachment[], uploads: UploadRef[], model?: ModelChoice | null) => Promise<boolean>;
   stop: () => Promise<void>;
   respondApproval: (cardId: string, choice: ApprovalChoice) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
@@ -413,7 +414,7 @@ export function useDash(): DashController {
   }, [openSession, pqsFor]);
 
   const send = useCallback(
-    async (text: string, images: ImageAttachment[], uploads: UploadRef[]): Promise<boolean> => {
+    async (text: string, images: ImageAttachment[], uploads: UploadRef[], model?: ModelChoice | null): Promise<boolean> => {
       const pName = profileRef.current;
       const p = pqsFor(pName);
       if (isActive(runRef.current)) {
@@ -447,6 +448,7 @@ export function useDash(): DashController {
           client_request_id: crid,
           ...(images.length ? { images: images.map((i) => ({ mime: i.mime, data: i.data })) } : {}),
           ...(uploads.length ? { uploads: uploads.map((u) => u.upload_id) } : {}),
+          ...(model ? { model } : {}),
         });
         // Accepted by Hermes: an identical later message is a new turn, not a retry.
         tab.set(pendingKey(pName, sid), null);

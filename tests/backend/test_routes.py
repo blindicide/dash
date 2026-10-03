@@ -341,3 +341,28 @@ def test_preferences_validated(client):
     )
     assert client.put(f"{P}/preferences", json={"density": "<script>"}, headers=MUT).status_code == 400
     assert client.put(f"{P}/preferences", json={"api_url": "http://evil"}, headers=MUT).status_code == 400
+
+
+def test_model_choices_only_authenticated_or_current(client):
+    body = client.get(f"{P}/models/choices").json()
+    assert body["available"] is True and body["current"] == {"provider": "custom", "model": "m"}
+    assert [p["provider"] for p in body["providers"]] == ["custom", "anthropic"]
+
+
+def test_run_model_override_validated_against_hermes_options(client, fake):
+    sid = _new_session(client, fake)
+    ok = _send(client, sid, model={"provider": "anthropic", "model": "claude-x"})
+    assert ok.status_code == 202
+    assert (fake.runs[ok.json()["run_id"]]["provider"], fake.runs[ok.json()["run_id"]]["model"]) == (
+        "anthropic",
+        "claude-x",
+    )
+    fake.runs[ok.json()["run_id"]]["status"] = "completed"
+    for bad in (
+        {"provider": "nous", "model": "n1"},
+        {"provider": "anthropic", "model": "evil"},
+        {"provider": "x"},
+        "gpt",
+    ):
+        r = _send(client, sid, model=bad)
+        assert r.status_code == 400, (bad, r.text)

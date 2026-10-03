@@ -5,6 +5,8 @@
  */
 import type {
   Capabilities,
+  ModelChoice,
+  ModelChoices,
   Message,
   Preferences,
   ProfileItem,
@@ -188,6 +190,7 @@ export const api = {
       client_request_id: string;
       images?: { mime: string; data: string }[];
       uploads?: string[];
+      model?: ModelChoice;
     },
   ) => call<{ run_id: string; status: string; replayed: boolean; session_id: string }>("POST", "/runs", { profile, body }),
   run: (profile: string | null, runId: string) => call<{ run: RunRecord }>("GET", `/runs/${runId}`, { profile }),
@@ -199,6 +202,7 @@ export const api = {
       body: requestId ? { choice, request_id: requestId } : { choice },
     }),
   models: (profile: string | null) => call<{ model_options: unknown }>("GET", "/hermes/models", { profile }),
+  modelChoices: (profile: string | null) => call<ModelChoices>("GET", "/models/choices", { profile }),
   skills: (profile: string | null) =>
     call<{ skills: { name: string; description?: string; category?: string; enabled?: boolean }[] }>(
       "GET",

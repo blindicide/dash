@@ -665,6 +665,24 @@ async def create_run(request: Request, ctx: Ctx = Depends(ctx_dep)):
     caps = _derive_capabilities(await _probe_capabilities(ctx), ctx)
     if not caps["runs"]["submit"]:
         raise DashError(501, "unsupported_capability", "This Hermes API server does not support /v1/runs.")
+    provider = model = None
+    choice = body.get("model")
+    if choice is not None:
+        if (
+            not isinstance(choice, dict)
+            or not isinstance(choice.get("provider"), str)
+            or not isinstance(choice.get("model"), str)
+        ):
+            raise DashError(400, "invalid_model", "model must be {provider, model}.")
+        if not caps["hermes"]["model_options"]:
+            raise DashError(501, "unsupported_capability", "This Hermes does not expose model options.")
+        options = await _model_choices(ctx)
+        allowed = any(
+            p["provider"] == choice["provider"] and choice["model"] in p["models"] for p in options["providers"]
+        )
+        if not allowed:
+            raise DashError(400, "unknown_model", "That provider/model is not offered by this Hermes profile.")
+        provider, model = choice["provider"], choice["model"]
     # Busy guard: one dash-submitted run per session at a time (Hermes' own lock is per agent).
     pointer = ctx.store.active_run(sid)
     if pointer and pointer.get("client_request_id") != crid:
@@ -684,7 +702,11 @@ async def create_run(request: Request, ctx: Ctx = Depends(ctx_dep)):
     else:
         content = text
     result, replayed = await ctx.client.create_run(
-        session_id=sid, content=content, idempotency_key=_idempotency_key(ctx.profile, sid, crid)
+        session_id=sid,
+        content=content,
+        idempotency_key=_idempotency_key(ctx.profile, sid, crid),
+        provider=provider,
+        model=model,
     )
     run_id = validation.run_id(result.get("run_id"))
     ctx.store.set_active_run(sid, run_id, crid)
@@ -809,6 +831,55 @@ def _clear_run_pointer(store: StateStore, run_id: str) -> None:
 async def hermes_models(ctx: Ctx = Depends(ctx_dep)):
     raw = await ctx.client.model_options()
     return {"profile": ctx.profile, "model_options": _bounded(raw)}
+
+
+_model_cache: dict[str, tuple] = {}
+MODEL_CHOICES_TTL = 60.0
+
+
+async def _model_choices(ctx: Ctx) -> dict[str, Any]:
+    """Selectable models = providers Hermes reports as authenticated or current, with the
+    model ids Hermes lists for them. Built server-side; the browser can only pick from it."""
+    key = f"{ctx.profile}|{ctx.target.base_url}"
+    cached = _model_cache.get(key)
+    if cached and time.monotonic() - cached[0] < MODEL_CHOICES_TTL:
+        return cached[1]
+    raw = await ctx.client.model_options()
+    providers = raw.get("providers") if isinstance(raw.get("providers"), list) else []
+    out = []
+    for prov in providers:
+        if not isinstance(prov, dict) or not (prov.get("authenticated") or prov.get("is_current")):
+            continue
+        slug = prov.get("slug")
+        models = [m for m in (prov.get("models") or []) if isinstance(m, str) and 0 < len(m) <= 200][:300]
+        if not isinstance(slug, str) or not slug or not models:
+            continue
+        out.append(
+            {
+                "provider": slug[:100],
+                "name": str(prov.get("name") or slug)[:100],
+                "current": bool(prov.get("is_current")),
+                "models": models,
+            }
+        )
+    result = {
+        "current": {
+            "provider": raw.get("provider") if isinstance(raw.get("provider"), str) else None,
+            "model": raw.get("model") if isinstance(raw.get("model"), str) else None,
+        },
+        "providers": out,
+    }
+    _model_cache[key] = (time.monotonic(), result)
+    return result
+
+
+@router.get("/models/choices")
+@_guarded
+async def model_choices(ctx: Ctx = Depends(ctx_dep)):
+    caps = _derive_capabilities(await _probe_capabilities(ctx), ctx)
+    if not caps["hermes"]["model_options"]:
+        return {"available": False, "current": None, "providers": []}
+    return {"available": True, **(await _model_choices(ctx))}
 
 
 @router.get("/hermes/skills")

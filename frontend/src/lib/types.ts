@@ -198,3 +198,14 @@ export interface UploadRef {
   mime: string;
   size: number;
 }
+
+export interface ModelChoice {
+  provider: string;
+  model: string;
+}
+
+export interface ModelChoices {
+  available: boolean;
+  current: { provider: string | null; model: string | null } | null;
+  providers: { provider: string; name: string; current: boolean; models: string[] }[];
+}

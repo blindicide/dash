@@ -764,6 +764,17 @@ span.dash-badge--secondary {
   min-height: 2.5rem;
   max-height: 15rem;
 }
+.dash-composer__meta {
+  max-width: 52rem;
+  margin: 0.35rem auto 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.dash-composer__meta select {
+  font-size: 0.8rem;
+  min-height: 1.6rem;
+  max-width: 16rem;
+}
 .dash-attachments {
   display: flex;
   gap: 0.5rem;

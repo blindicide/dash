@@ -164,16 +164,29 @@ class HermesClient:
 
     # -- runs ------------------------------------------------------------------------------
 
-    async def create_run(self, *, session_id: str, content: Any, idempotency_key: str) -> tuple[dict[str, Any], bool]:
-        """``POST /v1/runs``; returns ``(body, replayed)``."""
+    async def create_run(
+        self,
+        *,
+        session_id: str,
+        content: Any,
+        idempotency_key: str,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """``POST /v1/runs``; returns ``(body, replayed)``. ``provider``/``model`` are the
+        documented per-request overrides (``_request_agent_overrides``)."""
         if isinstance(content, str):
             run_input: Any = content
         else:
             run_input = [{"role": "user", "content": content}]
+        payload: dict[str, Any] = {"input": run_input, "session_id": session_id}
+        if provider and model:
+            payload["provider"] = provider
+            payload["model"] = model
         body, headers = await self.request(
             "POST",
             "/v1/runs",
-            json={"input": run_input, "session_id": session_id},
+            json=payload,
             headers={"Idempotency-Key": idempotency_key, "Content-Type": "application/json"},
             return_headers=True,
         )

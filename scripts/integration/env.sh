@@ -48,8 +48,18 @@ runtime_python() {
 # `hermes <args...>` with the scratch HERMES_HOME, without the bootstrap launcher. Printed as
 # an argv (one per line) so callers can exec it (keeps the recorded PID = the Python PID).
 HERMES_MAIN="import sys; sys.path.insert(0, sys.argv.pop(1)); from hermes_cli.main import main; sys.argv[0] = 'hermes'; sys.exit(main())"
+# Scrubbed environment: no inherited credentials, and a scratch $HOME so Hermes cannot
+# discover the operator's auth stores (CLI logins, keyrings) or touch their per-user host
+# lock/rendezvous directory.
+FAKE_HOME="$WORK/userhome"
+sandbox_env() {
+  echo env -i "HOME=$FAKE_HOME" "PATH=/usr/local/bin:/usr/bin:/bin" "LANG=C.UTF-8" "TZ=${TZ:-UTC}" \
+    "HERMES_HOME=$HOME_DIR" "HERMES_DISABLE_LAZY_INSTALLS=1"
+}
 hermes_direct() {
-  HERMES_HOME="$HOME_DIR" HERMES_DISABLE_LAZY_INSTALLS=1 "$(runtime_python)" -I -c "$HERMES_MAIN" "$HERMES_SRC" "$@"
+  mkdir -p "$FAKE_HOME"
+  # shellcheck disable=SC2046
+  $(sandbox_env) "$(runtime_python)" -I -c "$HERMES_MAIN" "$HERMES_SRC" "$@"
 }
 
 shim_sums() { sha256sum "${SHIMS[@]}" 2>/dev/null || true; }
@@ -134,10 +144,13 @@ YAML
 
   shim_sums >"$WORK/shims.before"
   local rpy; rpy="$(runtime_python)"
-  start_bg gateway "$WORK/gateway.log" env HERMES_HOME="$HOME_DIR" HERMES_DISABLE_LAZY_INSTALLS=1 "$rpy" -I -c "$HERMES_MAIN" "$HERMES_SRC" gateway run
+  mkdir -p "$FAKE_HOME"
+  # shellcheck disable=SC2046
+  start_bg gateway "$WORK/gateway.log" $(sandbox_env) "$rpy" -I -c "$HERMES_MAIN" "$HERMES_SRC" gateway run
   wait_http "http://127.0.0.1:${API_PORT}/health" 180
 
-  start_bg dashboard "$WORK/dashboard.log" env HERMES_HOME="$HOME_DIR" HERMES_DISABLE_LAZY_INSTALLS=1 "$rpy" -I -c "$HERMES_MAIN" "$HERMES_SRC" \
+  # shellcheck disable=SC2046
+  start_bg dashboard "$WORK/dashboard.log" $(sandbox_env) "$rpy" -I -c "$HERMES_MAIN" "$HERMES_SRC" \
     dashboard --isolated --host 127.0.0.1 --port "$DASH_PORT" --skip-build --no-open
   wait_http "http://127.0.0.1:${DASH_PORT}/" 180
   check_shims

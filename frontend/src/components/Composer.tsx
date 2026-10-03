@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, DashApiError } from "../lib/api";
 import { draftKey, tab } from "../lib/storage";
-import type { Capabilities, ImageAttachment, UploadRef } from "../lib/types";
+import type { Capabilities, ImageAttachment, ModelChoice, ModelChoices, UploadRef } from "../lib/types";
 import { fileToBase64, formatBytes, uuid } from "../lib/util";
 import { Btn } from "./ui";
 
@@ -17,7 +17,10 @@ interface Props {
   canStop: boolean;
   online: boolean;
   enterToSend: boolean;
-  onSend: (text: string, images: ImageAttachment[], uploads: UploadRef[]) => Promise<boolean>;
+  onSend: (text: string, images: ImageAttachment[], uploads: UploadRef[], model?: ModelChoice | null) => Promise<boolean>;
+  models: ModelChoices | null;
+  model: ModelChoice | null;
+  onModel: (choice: ModelChoice | null) => void;
   onStop: () => void;
   onError: (text: string) => void;
 }
@@ -123,7 +126,7 @@ export function Composer(props: Props) {
   const submit = async () => {
     const body = text.trim();
     if ((!body && images.length === 0) || busy || sending) return;
-    const ok = await props.onSend(body, images, uploads);
+    const ok = await props.onSend(body, images, uploads, props.model);
     if (ok) {
       setText("");
       tab.set(key, null);
@@ -266,6 +269,34 @@ export function Composer(props: Props) {
           </Btn>
         )}
       </div>
+      {props.models?.available && props.models.providers.length ? (
+        <div className="dash-composer__meta">
+          <label className="dash-select dash-small">
+            <span className="dash-muted">Model </span>
+            <select
+              aria-label="Model for the next message"
+              value={props.model ? `${props.model.provider}\u0000${props.model.model}` : ""}
+              onChange={(e) => {
+                const [provider, model] = e.target.value.split("\u0000");
+                props.onModel(provider && model ? { provider, model } : null);
+              }}
+            >
+              <option value="">
+                Hermes default{props.models.current?.model ? ` (${props.models.current.model})` : ""}
+              </option>
+              {props.models.providers.map((p) => (
+                <optgroup key={p.provider} label={p.name}>
+                  {p.models.map((m) => (
+                    <option key={`${p.provider}/${m}`} value={`${p.provider}\u0000${m}`}>
+                      {m}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
       <p id="dash-composer-hint" className="dash-sr">
         {enterToSend ? "Enter sends, Shift+Enter adds a new line." : "Ctrl or Cmd + Enter sends."}
       </p>
