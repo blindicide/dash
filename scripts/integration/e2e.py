@@ -449,15 +449,19 @@ def t_crud():
     return {"session": sid, "fork": fork["id"], "fork_title": fork.get("title")}
 
 
-@check("canonical Bot Chat: discover-or-create once, never duplicated, protected from delete")
+@check("canonical Bot Chat: unique, protected, and dash turns reach official Hermes history")
 def t_bot():
     with browser() as c:
         a = c.post(f"{P}/bot-chat", headers={"X-Dash-Request": "1"}).json()
         b = c.post(f"{P}/bot-chat", headers={"X-Dash-Request": "1"}).json()
         g = c.get(f"{P}/bot-chat").json()
+        run = send(c, a["session"]["id"], "bot interoperability probe")
+        evs = sse_events(c, run["run_id"])
+        dash_msgs = c.get(f"{P}/sessions/{a['session']['id']}/messages").json()["messages"]
+        official = c.get(f"/api/sessions/{a['session']['id']}/messages").json()
         dele = c.delete(f"{P}/sessions/{a['session']['id']}", headers={"X-Dash-Request": "1"})
     assert a["session"]["id"] == b["session"]["id"] == g["session"]["id"]
-    assert b["created"] is False and dele.status_code == 409
+    assert b["created"] is False and dele.status_code == 409 and terminal(evs)["status"] == "completed"
     direct = httpx.get(
         f"{API}/api/sessions",
         params={"title": "Bot Chat", "include_hidden": "1", "limit": 200},
@@ -466,7 +470,23 @@ def t_bot():
     ).json()
     rows = [s for s in direct["data"] if s.get("title") == "Bot Chat"]
     assert len(rows) == 1, rows
-    return {"bot_chat_id": a["session"]["id"], "created_first_call": a["created"]}
+    direct_msgs = httpx.get(
+        f"{API}/api/sessions/{a['session']['id']}/messages",
+        headers={"Authorization": f"Bearer {api_key()}"},
+        timeout=10,
+    ).json()["data"]
+
+    def has_probe(messages):
+        return any(m.get("role") == "user" and m.get("content") == "bot interoperability probe" for m in messages)
+
+    official_msgs = official.get("messages") or official.get("data") or []
+    assert has_probe(dash_msgs) and has_probe(official_msgs) and has_probe(direct_msgs)
+    return {
+        "bot_chat_id": a["session"]["id"],
+        "created_first_call": a["created"],
+        "dash_turn_visible_in_dashboard_api": True,
+        "dash_turn_visible_in_api_server": True,
+    }
 
 
 @check("last dash session persists per profile in plugin-data")
@@ -563,6 +583,28 @@ def t_model():
     return {"runtime": final.get("runtime"), "rejected": bad.json()["error"]["code"]}
 
 
+@check("read-only Hermes context (toolsets, model options) through the BFF; skills defect degrades safely")
+def t_readonly():
+    with browser() as c:
+        skills = c.get(f"{P}/hermes/skills")
+        toolsets = c.get(f"{P}/hermes/toolsets")
+        models = c.get(f"{P}/hermes/models")
+    assert toolsets.status_code == models.status_code == 200
+    ts = toolsets.json()["toolsets"]
+    assert any(t["name"] == "terminal" for t in ts), [t["name"] for t in ts][:10]
+    assert api_key() not in skills.text + toolsets.text + models.text
+    # The tested Hermes source's own GET /v1/skills raises TypeError (_find_all_skills() got an
+    # unexpected keyword argument 'include_editorial'); dash must surface it as a safe,
+    # retryable error rather than crash or leak a traceback.
+    if skills.status_code == 200:
+        skills_result = f"ok ({len(skills.json()['skills'])} skills)"
+    else:
+        err = skills.json()["error"]
+        assert skills.status_code == 502 and err["retryable"] is True and "Traceback" not in skills.text, skills.text
+        skills_result = f"hermes error surfaced safely: {skills.status_code} {err['code']}"
+    return {"toolsets": len(ts), "skills": skills_result}
+
+
 ALL = [
     t_auth,
     t_status,
@@ -582,6 +624,7 @@ ALL = [
     t_state,
     t_profiles,
     t_model,
+    t_readonly,
 ]
 
 

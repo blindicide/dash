@@ -13,7 +13,7 @@
 #
 # SAFETY: do NOT run the `hermes` launcher with a fresh HERMES_HOME. Its bootstrap
 # (hermes_bootstrap -> venv_sync.prepare_launch) provisions a new runtime for that home and,
-# on Hermes v0.21.5, regenerates the shared checkout launcher shims
+# on the tested Hermes v0.21.5 lineage, regenerates the shared checkout launcher shims
 # (<hermes-agent>/.hermes/bin/hermes, hermes-acp) to point at the scratch interpreter. This
 # script therefore starts `hermes_cli.main` with the installed runtime venv and
 # HERMES_DISABLE_LAZY_INSTALLS=1 (the supported opt-out that makes prepare_launch a no-op),
