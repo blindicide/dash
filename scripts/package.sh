@@ -6,9 +6,9 @@
 #   release/SHA256SUMS
 #   release/README-PACK.md              manifest (also inside the package)
 #
-# Reproducible: file order, owners and mtimes are normalised to the commit time
-# (SOURCE_DATE_EPOCH) and gzip omits timestamps, so the same commit yields the same bytes
-# given the same build toolchain. Refuses to package a dirty tracked tree unless
+# Reproducible: file order, owners, permissions and mtimes (commit time, SOURCE_DATE_EPOCH)
+# are normalised and gzip omits timestamps, so the same commit yields the same bytes given
+# the same build toolchain. Refuses to package a dirty tracked tree unless
 # DASH_ALLOW_DIRTY=1. Never includes .git, node_modules, caches, .env files or .integration/.
 set -euo pipefail
 
@@ -57,7 +57,9 @@ if grep -RInE '(API_SERVER_KEY|OPENAI_API_KEY)=[A-Za-z0-9]{16,}|sk-[A-Za-z0-9_-]
   exit 1
 fi
 
-TAR_FLAGS=(--sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" --format=gnu)
+# --mode makes permissions independent of the builder's umask (664 vs 644 broke cross-machine
+# reproducibility): files 644, directories and install.sh 755.
+TAR_FLAGS=(--sort=name --owner=0 --group=0 --numeric-owner --mode=u=rwX,go=rX --mtime="@$SOURCE_DATE_EPOCH" --format=gnu)
 
 write_manifest() { # target file
   local target="$1"

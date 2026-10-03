@@ -54,7 +54,7 @@ Hermes launcher shim checksum was identical before and after (`f773bf77dda103d8â
 | `uv run ruff check .` / `uv run ruff format --check .` | pass / pass (32 files) |
 | `uv run pytest` | pass: **78 tests**; one upstream Starlette `TestClient`/httpx deprecation warning |
 | `git diff --check` | pass |
-| `bash scripts/package.sh` (twice, same commit) | identical SHA-256 for both archives, so the build is byte-reproducible with this toolchain |
+| `bash scripts/package.sh` (twice, same commit) | identical SHA-256 for both archives locally. The first hosted CI build of the same commit produced an identical source archive and identical file contents, but a different install-archive hash, because tar recorded the builder's umask (664 vs 644). Permissions are now normalised; see the hosted-build comparison recorded with the release. |
 | `shellcheck` | **not run**: not installed in this environment (`bash -n` syntax checks only) |
 
 The frontend and backend suites are unit and component tests against fake upstreams. They
