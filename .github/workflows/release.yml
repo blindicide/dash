@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: require an annotated tag
+        run: |
+          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag || { echo "::error::$GITHUB_REF_NAME is not an annotated tag"; exit 1; }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.14"
+      - run: npm ci --include=dev
+      - name: version matches tag
+        run: npm run version:check   # fails when $GITHUB_REF_NAME != v<version>
+      - run: npm run lint && npm run typecheck && npm test
+      - run: uv sync --locked && uv run ruff check . && uv run ruff format --check . && uv run pytest
+      - run: bash scripts/package.sh
+      - run: cd release && sha256sum -c SHA256SUMS
+      - name: changelog section for this version
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {p=1; next} p && /^## \[/ {exit} p' CHANGELOG.md > release/NOTES.md
+          test -s release/NOTES.md
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "dash $GITHUB_REF_NAME" \
+            --notes-file release/NOTES.md \
+            --verify-tag \
+            release/dash-*.tar.gz release/SHA256SUMS release/README-PACK.md
