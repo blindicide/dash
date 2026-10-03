@@ -1,6 +1,6 @@
 {
   "name": "hermes-dash",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "dash (\\) — persistent web companion interface for Hermes Agent (Dashboard plugin frontend)",
   "license": "MIT",

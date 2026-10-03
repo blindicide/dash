@@ -4,6 +4,17 @@ All notable changes to dash (`\`) are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-10-03 — `dash`
+
+Packaging fix; the plugin source is unchanged apart from its version.
+
+### Fixed
+- Release archives always contain a production bundle. The v1.0.1 release job inherited
+  `NODE_ENV=test`, so its published `dash-v1.0.1.tar.gz` held a development-transform
+  `dist/index.js` with JSX source records (CI runner paths and line numbers) that differed
+  from the verified bundle. `package.sh` now forces a production build and refuses a
+  development bundle. Use 1.0.2 rather than the v1.0.1 archive.
+
 ## [1.0.1] - 2026-10-03 — `dash`
 
 Release-automation fix; the plugin itself is unchanged apart from its version.
