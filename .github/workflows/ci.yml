@@ -21,8 +21,6 @@ jobs:
       fail-fast: false
       matrix:
         node: ["22", "24"]
-    env:
-      NODE_ENV: test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -41,6 +39,7 @@ jobs:
         run: |
           if grep -q "react.production" plugin/dashboard/dist/index.js; then echo "::error::React was bundled"; exit 1; fi
           grep -q "__HERMES_PLUGIN_SDK__" plugin/dashboard/dist/index.js
+          if grep -q "lineNumber" plugin/dashboard/dist/index.js; then echo "::error::development JSX build"; exit 1; fi
 
   backend:
     name: backend (python ${{ matrix.python }})

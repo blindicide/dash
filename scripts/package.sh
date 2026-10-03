@@ -29,11 +29,17 @@ COMMIT="$(git rev-parse HEAD)"
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
 
 if [[ "${DASH_SKIP_BUILD:-0}" != "1" ]]; then
-  npm run -s build
+  # An inherited NODE_ENV (e.g. "test") switches Vite to the development JSX transform, which
+  # embeds source paths and line numbers; release bundles are always production builds.
+  NODE_ENV=production npm run -s build
 fi
 for f in plugin/dashboard/dist/index.js plugin/dashboard/dist/style.css; do
   [[ -s "$f" ]] || { echo "missing build output $f" >&2; exit 1; }
 done
+if grep -q 'lineNumber' plugin/dashboard/dist/index.js; then
+  echo "refusing to package: dist/index.js is a development build (JSX source info)" >&2
+  exit 1
+fi
 
 rm -rf "$OUT/stage" "$OUT/$NAME.tar.gz" "$OUT/$NAME-source.tar.gz" "$OUT/SHA256SUMS" "$OUT/README-PACK.md"
 mkdir -p "$STAGE/dash/dashboard/dash_bff" "$STAGE/dash/dashboard/dist" "$STAGE/docs"
