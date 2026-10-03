@@ -84,7 +84,7 @@ See [docs/development.md](docs/development.md) and [CONTRIBUTING.md](CONTRIBUTIN
 
 ## Status
 
-Version **1.0.0**. Verified against a real Hermes gateway and Dashboard in an isolated
+Version **1.0.1**. Verified against a real Hermes gateway and Dashboard in an isolated
 environment with a scripted model provider: 19 API-level and 7 real-Chromium end-to-end
 checks. Live production-model use, external messaging delivery and remote proxy deployments
 were not exercised. The full, candid account is in

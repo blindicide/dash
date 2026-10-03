@@ -1,6 +1,6 @@
 [project]
 name = "hermes-dash"
-version = "1.0.0"
+version = "1.0.1"
 description = "dash (\\) — persistent web companion interface for Hermes Agent (Dashboard BFF)"
 readme = "README.md"
 license = "MIT"

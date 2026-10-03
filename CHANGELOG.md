@@ -4,6 +4,16 @@ All notable changes to dash (`\`) are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-03 — `dash`
+
+Release-automation fix; the plugin itself is unchanged apart from its version.
+
+### Fixed
+- The tagged release workflow now fetches the annotated tag object before checking it.
+  `actions/checkout` had fetched `v1.0.0` without it, so that tag's release job stopped and
+  **no GitHub Release or archives were published for v1.0.0**. 1.0.1 is the first published
+  release.
+
 ## [1.0.0] - 2026-10-03 — `dash`
 
 The roadmap milestones 0.2.0 `continuity` through 0.9.0 `remote` were implemented on the way
