@@ -54,16 +54,20 @@ Hermes launcher shim checksum was identical before and after (`f773bf77dda103d8�
 | `uv run ruff check .` / `uv run ruff format --check .` | pass / pass (32 files) |
 | `uv run pytest` | pass: **78 tests**; one upstream Starlette `TestClient`/httpx deprecation warning |
 | `git diff --check` | pass |
-| `bash scripts/package.sh` (twice, same commit) | identical SHA-256 for both archives locally. The first hosted CI build of the same commit produced an identical source archive and identical file contents, but a different install-archive hash, because tar recorded the builder's umask (664 vs 644). Permissions are now normalised; see the hosted-build comparison recorded with the release. |
+| `bash scripts/package.sh` (twice, same commit) | identical SHA-256 for both archives locally. The first hosted CI build of the same commit produced an identical source archive and identical file contents, but a different install-archive hash, because tar recorded the builder's umask (664 vs 644). After permissions were normalised (`64dc4d2`), hosted CI run 37139401990 built `SHA256SUMS` identical to the local build of that commit (`5c648317…` install, `b52bee19…` source). |
 | `shellcheck` | **not run**: not installed in this environment (`bash -n` syntax checks only) |
 
 The frontend and backend suites are unit and component tests against fake upstreams. They
 are not counted as real-Hermes evidence.
 
+Hosted CI (`.github/workflows/ci.yml`) passed all seven jobs on `1a1c45b` (run 37139306654)
+and `64dc4d2` (run 37139401990): frontend on Node 22 and 24, backend on Python 3.11–3.14, and
+package. GitHub warned that the pinned `actions/checkout`, `setup-node` and `setup-uv`
+majors target the deprecated Node 20 runtime. This is a maintenance item, not a failure.
+
 Pinned GitHub Actions were resolved through the GitHub API. Each full commit id exists and
 matches the tag in its comment (`actions/checkout` v4.4.0, `actions/setup-node` v4.4.0,
-`astral-sh/setup-uv` v6.8.0, `actions/upload-artifact` v4.6.2). The results of the hosted
-CI/release workflows are recorded outside this file, because they run after it is committed.
+`astral-sh/setup-uv` v6.8.0, `actions/upload-artifact` v4.6.2).
 
 ## Real Hermes and browser integration
 
