@@ -100,15 +100,13 @@ def _same_origin(request: Request) -> bool:
     parts = urlsplit(origin)
     if not parts.netloc:
         return False
-    hosts = {
-        h.split(",")[0].strip().lower()
-        for h in (request.headers.get("host"), request.headers.get("x-forwarded-host"))
-        if h
-    }
+    host = (request.headers.get("host") or "").strip().lower()
+    scheme = request.url.scheme.lower()
     trusted = {
         o.strip().rstrip("/").lower() for o in os.environ.get("DASH_TRUSTED_ORIGINS", "").split(",") if o.strip()
     }
-    return parts.netloc.lower() in hosts or origin.rstrip("/").lower() in trusted
+    expected = f"{scheme}://{host}" if host else ""
+    return origin.rstrip("/").lower() == expected or origin.rstrip("/").lower() in trusted
 
 
 def mutation_guard(request: Request) -> None:
@@ -653,13 +651,14 @@ async def create_run(request: Request, ctx: Ctx = Depends(ctx_dep)):
     images = validation.images(
         body.get("images"), max_count=ctx.settings.image_max_count, max_bytes=ctx.settings.image_max_bytes
     )
-    text = validation.message_text(body.get("text", ""), allow_empty=bool(images))
     upload_ids = body.get("uploads") or []
     if upload_ids:
         if not ctx.settings.uploads_enabled:
             raise DashError(403, "uploads_disabled", "File uploads are disabled on this server.")
         if not isinstance(upload_ids, list) or len(upload_ids) > 8:
             raise DashError(400, "invalid_uploads", "uploads must be a list of at most 8 ids.")
+    text = validation.message_text(body.get("text", ""), allow_empty=bool(images or upload_ids))
+    if upload_ids:
         stored = [uploads.load(str(u)) for u in upload_ids]
         text = validation.message_text(text + uploads.attachment_note(stored))
     caps = _derive_capabilities(await _probe_capabilities(ctx), ctx)

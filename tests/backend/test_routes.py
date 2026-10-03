@@ -37,6 +37,17 @@ def test_same_origin_mutation_allowed(client):
     assert r.status_code == 200, r.text
 
 
+def test_origin_scheme_must_match_and_forwarded_host_is_not_trusted(client):
+    r = client.post(f"{P}/sessions", json={}, headers={**MUT, "Origin": "https://127.0.0.1:9119"})
+    assert r.status_code == 403
+    r = client.post(
+        f"{P}/sessions",
+        json={},
+        headers={**MUT, "Origin": "https://evil.example", "X-Forwarded-Host": "evil.example"},
+    )
+    assert r.status_code == 403
+
+
 def test_invalid_profile_rejected(client):
     r = client.get(f"{P}/sessions", params={"profile": "../etc"})
     assert r.status_code == 400

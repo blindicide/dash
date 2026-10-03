@@ -212,12 +212,22 @@ def test_upload_route_enabled(client, monkeypatch, fake):
     fake.add_session("s1")
     r = client.post(
         "/api/plugins/dash/runs",
-        json={"session_id": "s1", "text": "read it", "client_request_id": str(uuid.uuid4()), "uploads": [uid]},
+        json={"session_id": "s1", "text": "", "client_request_id": str(uuid.uuid4()), "uploads": [uid]},
         headers=MUT,
     )
     assert r.status_code == 202
     sent = fake.runs[r.json()["run_id"]]["input"]
     assert "notes.md" in sent and uid in sent
+
+    second = client.post(
+        "/api/plugins/dash/uploads",
+        content=b"remove me",
+        headers={"X-Dash-Request": "1", "X-Dash-Filename": "remove.txt"},
+    ).json()["upload"]["upload_id"]
+    assert client.delete(f"/api/plugins/dash/uploads/{second}", headers={"X-Dash-Request": "1"}).json() == {
+        "deleted": True
+    }
+    assert not (uploads.upload_dir() / f"{second}.txt").exists()
 
 
 # -- store ----------------------------------------------------------------------------------
