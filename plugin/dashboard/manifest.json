@@ -1,0 +1,14 @@
+{
+  "name": "dash",
+  "label": "\\ dash",
+  "description": "dash (\\) — persistent web companion interface for Hermes Agent. Hermes remains the agent; dash is another presentation layer.",
+  "icon": "MessageSquare",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/dash",
+    "position": "after:chat"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}
