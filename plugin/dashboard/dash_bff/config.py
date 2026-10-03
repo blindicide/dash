@@ -54,7 +54,7 @@ def load_settings() -> Settings:
         uploads_enabled=_env_bool("DASH_UPLOADS_ENABLED"),
         upload_max_bytes=_env_int("DASH_UPLOAD_MAX_BYTES", 10 * 1024 * 1024, minimum=1024, maximum=50 * 1024 * 1024),
         upload_ttl_hours=_env_int("DASH_UPLOAD_TTL_HOURS", 24, minimum=1, maximum=24 * 30),
-        image_max_bytes=_env_int("DASH_IMAGE_MAX_BYTES", 5 * 1024 * 1024, minimum=1024, maximum=8 * 1024 * 1024),
+        image_max_bytes=_env_int("DASH_IMAGE_MAX_BYTES", 5 * 1024 * 1024, minimum=1024, maximum=7_000_000),
         image_max_count=_env_int("DASH_IMAGE_MAX_COUNT", 4, minimum=1, maximum=8),
     )
 

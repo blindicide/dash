@@ -34,7 +34,7 @@ BOT_CHAT_TITLE = "Bot Chat"  # tools.bot_mode_probe.BOT_CHAT_TITLE / hermes_cli/
 SEARCH_PAGE = 200
 SEARCH_MAX_SESSIONS = 1000
 CAPABILITY_TTL = 30.0
-MAX_JSON_BODY = 48 * 1024 * 1024  # images are base64 in the body; bounded again per image
+MAX_JSON_BODY = 12 * 1024 * 1024  # base64 images (validation.IMAGE_TOTAL_MAX_BYTES) + text
 
 router = APIRouter()
 
@@ -126,7 +126,7 @@ async def _json_body(request: Request, *, limit: int = 256 * 1024) -> dict[str, 
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > limit:
         raise DashError(413, "body_too_large", "Request body too large.")
-    raw = b""
+    raw = bytearray()
     async for chunk in request.stream():
         raw += chunk
         if len(raw) > limit:
@@ -134,7 +134,7 @@ async def _json_body(request: Request, *, limit: int = 256 * 1024) -> dict[str, 
     try:
         import json
 
-        body = json.loads(raw or b"{}")
+        body = json.loads(bytes(raw) or b"{}")
     except ValueError:
         raise DashError(400, "invalid_json", "Request body is not valid JSON.") from None
     if not isinstance(body, dict):
@@ -335,6 +335,7 @@ def _derive_capabilities(raw: dict[str, Any], ctx: Ctx) -> dict[str, Any]:
             "images": "source_verified" if runs else False,
             "image_max_bytes": ctx.settings.image_max_bytes,
             "image_max_count": ctx.settings.image_max_count,
+            "image_total_max_bytes": validation.IMAGE_TOTAL_MAX_BYTES,
             "uploads": ctx.settings.uploads_enabled,
             "upload_max_bytes": ctx.settings.upload_max_bytes if ctx.settings.uploads_enabled else 0,
         },
@@ -477,6 +478,10 @@ async def patch_session(session_id: str, request: Request, ctx: Ctx = Depends(ct
         new_title = validation.title(body["title"])
         if new_title == BOT_CHAT_TITLE:
             raise DashError(400, "reserved_title", "'Bot Chat' is reserved for the canonical Bot Chat.")
+        # Renaming the canonical Bot Chat would orphan it and make the next lookup create a
+        # duplicate, so its title is fixed (pin/archive stay allowed).
+        if _session_from(await ctx.client.get_session(sid)).get("is_bot_chat"):
+            raise DashError(409, "bot_chat_protected", "dash will not rename the canonical Bot Chat.")
         fields["title"] = new_title
     for flag in ("pinned", "archived"):
         if flag in body:

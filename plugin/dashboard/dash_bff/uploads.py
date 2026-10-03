@@ -102,6 +102,11 @@ def _content_ok(ext: str, head: bytes, path: Path) -> bool:
     return "\x00" not in text
 
 
+def _meta_path(directory: Path, upload_id: str) -> Path:
+    # Distinct from every allowed data extension (a ".json" upload is upl_<id>.json).
+    return directory / f"{upload_id}.meta.json"
+
+
 async def save(chunks: AsyncIterator[bytes], *, filename: str, max_bytes: int) -> StoredUpload:
     name = display_name(filename)
     ext, mime = classify(name)
@@ -133,10 +138,13 @@ async def save(chunks: AsyncIterator[bytes], *, filename: str, max_bytes: int) -
         raise
     created = time.time()
     meta = {"name": name, "mime": mime, "size": size, "created_at": created, "ext": ext}
-    meta_path = directory / f"{upload_id}.json"
-    meta_fd = os.open(meta_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(meta_fd, "w", encoding="utf-8") as fh:
-        json.dump(meta, fh)
+    try:
+        meta_fd = os.open(_meta_path(directory, upload_id), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(meta_fd, "w", encoding="utf-8") as fh:
+            json.dump(meta, fh)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
     return StoredUpload(upload_id, name, mime, size, path, created)
 
 
@@ -145,7 +153,7 @@ def load(upload_id: str) -> StoredUpload:
         raise DashError(400, "invalid_upload_id", "Invalid upload id.")
     directory = upload_dir()
     try:
-        meta = json.loads((directory / f"{upload_id}.json").read_text(encoding="utf-8"))
+        meta = json.loads(_meta_path(directory, upload_id).read_text(encoding="utf-8"))
         ext = str(meta["ext"])
         if ext not in TEXT_TYPES and ext not in BINARY_TYPES:
             raise ValueError
@@ -161,7 +169,7 @@ def load(upload_id: str) -> StoredUpload:
 
 def delete(upload_id: str) -> None:
     stored = load(upload_id)
-    for p in (stored.path, stored.path.with_suffix(".json")):
+    for p in (stored.path, _meta_path(stored.path.parent, upload_id)):
         try:
             p.unlink()
         except OSError:

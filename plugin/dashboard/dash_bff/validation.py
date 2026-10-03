@@ -23,6 +23,10 @@ MAX_MESSAGE_CHARS = 65_536  # api_server.MAX_NORMALIZED_TEXT_LENGTH
 MAX_TITLE_CHARS = 200
 APPROVAL_CHOICES = ("once", "session", "always", "deny")
 IMAGE_MIME_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
+# Hermes rejects /v1/runs bodies over api_server.MAX_REQUEST_BYTES (10_000_000). Images travel
+# base64-encoded (x4/3), so all images of one message together must stay well below that,
+# leaving room for up to MAX_MESSAGE_CHARS of escaped text and the JSON envelope.
+IMAGE_TOTAL_MAX_BYTES = 7_000_000
 
 
 class ValidationError(ValueError):
@@ -122,7 +126,9 @@ def _sniff_ok(mime: str, raw: bytes) -> bool:
     return any(raw.startswith(sig) for sig in _SIGNATURES.get(mime, ()))
 
 
-def images(value: Any, *, max_count: int, max_bytes: int) -> list[ImageInput]:
+def images(
+    value: Any, *, max_count: int, max_bytes: int, max_total_bytes: int = IMAGE_TOTAL_MAX_BYTES
+) -> list[ImageInput]:
     """Validate ``[{mime, data}]`` (data = base64 without the ``data:`` prefix).
 
     The declared MIME must be allow-listed and match the decoded magic bytes; SVG and any
@@ -136,6 +142,7 @@ def images(value: Any, *, max_count: int, max_bytes: int) -> list[ImageInput]:
     if len(value) > max_count:
         raise ValidationError("too_many_images", f"At most {max_count} images per message.")
     out: list[ImageInput] = []
+    total = 0
     for item in value:
         if not isinstance(item, dict):
             raise ValidationError("invalid_images", "Each image must be an object.")
@@ -155,6 +162,11 @@ def images(value: Any, *, max_count: int, max_bytes: int) -> list[ImageInput]:
             raise ValidationError("image_too_large", f"Image exceeds {max_bytes} bytes.")
         if not _sniff_ok(mime, raw):
             raise ValidationError("image_type_mismatch", "Image content does not match its declared type.")
+        total += len(raw)
+        if total > max_total_bytes:
+            raise ValidationError(
+                "images_too_large", f"Images in one message must total at most {max_total_bytes} bytes."
+            )
         out.append(
             ImageInput(mime=mime, data_url=f"data:{mime};base64,{base64.b64encode(raw).decode()}", size=len(raw))
         )

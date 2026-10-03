@@ -97,6 +97,11 @@ def test_image_limits():
         validation.images([{"mime": "image/png", "data": png}] * 3, max_count=2, max_bytes=10_000)
     with pytest.raises(validation.ValidationError):
         validation.images([{"mime": "image/png", "data": "!!notbase64"}], max_count=2, max_bytes=10_000)
+    # Per-image sizes are fine, but together they exceed the run-body budget Hermes accepts.
+    with pytest.raises(validation.ValidationError) as exc:
+        validation.images([{"mime": "image/png", "data": png}] * 2, max_count=4, max_bytes=10_000, max_total_bytes=3000)
+    assert exc.value.code == "images_too_large"
+    assert validation.IMAGE_TOTAL_MAX_BYTES * 4 // 3 + 6 * validation.MAX_MESSAGE_CHARS < 10_000_000
 
 
 # -- config ---------------------------------------------------------------------------------
@@ -174,6 +179,16 @@ def test_upload_rejections_leave_no_files(monkeypatch, tmp_path, name, data, cod
         asyncio.run(uploads.save(_chunks(data), filename=name, max_bytes=100))
     assert exc.value.code == code
     assert not [p for p in (tmp_path / "uploads").iterdir()] if (tmp_path / "uploads").exists() else True
+
+
+def test_json_upload_roundtrip_and_delete(monkeypatch, tmp_path):
+    # The data file of a .json upload must not collide with its metadata file.
+    monkeypatch.setenv("DASH_DATA_DIR", str(tmp_path))
+    stored = asyncio.run(uploads.save(_chunks(b'{"a": 1}'), filename="data.json", max_bytes=100))
+    loaded = uploads.load(stored.upload_id)
+    assert loaded.mime == "application/json" and loaded.path.read_bytes() == b'{"a": 1}'
+    uploads.delete(stored.upload_id)
+    assert list((tmp_path / "uploads").iterdir()) == []
 
 
 def test_upload_ids_validated(monkeypatch, tmp_path):

@@ -203,6 +203,9 @@ def test_bot_chat_cannot_be_deleted_or_created_as_plain_session(client, fake):
     fake.add_session("botchat_1", "Bot Chat")
     assert client.delete(f"{P}/sessions/botchat_1", headers={"X-Dash-Request": "1"}).status_code == 409
     assert client.post(f"{P}/sessions", json={"title": "Bot Chat"}, headers=MUT).status_code == 400
+    renamed = client.patch(f"{P}/sessions/botchat_1", json={"title": "Other"}, headers=MUT)
+    assert renamed.status_code == 409 and fake.sessions["botchat_1"]["title"] == "Bot Chat"
+    assert client.patch(f"{P}/sessions/botchat_1", json={"pinned": True}, headers=MUT).status_code == 200
 
 
 # -- runs -----------------------------------------------------------------------------------
