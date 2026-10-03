@@ -1,0 +1,38 @@
+[project]
+name = "hermes-dash"
+version = "0.1.0"
+description = "dash (\\) — persistent web companion interface for Hermes Agent (Dashboard BFF)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+# Runtime deps are provided by the Hermes Dashboard process (verified: fastapi 0.133.1,
+# httpx 0.28.1, starlette 1.3.1 on Hermes v0.21.5). They are listed for development only.
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "fastapi>=0.115,<1",
+  "httpx>=0.27,<0.29",
+  "pytest>=8.3",
+  "anyio>=4.4",
+  "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/backend"]
+pythonpath = ["plugin/dashboard"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["plugin/dashboard", "tests", "scripts"]
+extend-exclude = ["node_modules", "frontend", "release"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "S", "UP", "ASYNC"]
+ignore = ["S101", "B008", "UP007", "UP045", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "ASYNC"]
+"scripts/**" = ["S603", "S607", "S104", "S310"]

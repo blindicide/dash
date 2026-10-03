@@ -1,0 +1,24 @@
+# Dependencies / caches
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage/
+.coverage
+*.tsbuildinfo
+
+# Build outputs (shipped only inside release archives)
+plugin/dashboard/dist/
+dist/
+release/
+
+# Local / secret material — never commit
+.env
+.env.*
+*.pem
+*.key
+.integration/
+
