@@ -129,8 +129,8 @@ export function DashApp() {
           </h2>
           <p>{d.bootError}</p>
           <p className="dash-muted dash-small">
-            Check that the dash plugin is enabled (<code>hermes plugins enable dash</code>) and the Dashboard was
-            restarted so its backend routes are mounted.
+            Check that <code>dash</code> is listed in <code>plugins.enabled</code> in your Hermes config and the
+            Dashboard was restarted so its backend routes are mounted.
           </p>
           <Btn onClick={() => window.location.reload()}>Reload</Btn>
         </div>

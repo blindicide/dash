@@ -56,6 +56,7 @@ export function Composer(props: Props) {
     // first send does not lose the text or attachments.
     if (createdFromNew) {
       tab.set(key, textRef.current || null);
+      tab.set(draftKey(profileName, null), null);
       return;
     }
     setText(tab.get(key) ?? "");
@@ -125,7 +126,7 @@ export function Composer(props: Props) {
 
   const submit = async () => {
     const body = text.trim();
-    if ((!body && images.length === 0) || busy || sending) return;
+    if ((!body && images.length === 0 && uploads.length === 0) || busy || sending) return;
     const ok = await props.onSend(body, images, uploads, props.model);
     if (ok) {
       setText("");
@@ -144,7 +145,7 @@ export function Composer(props: Props) {
         void submit();
       }}
       onDragOver={(e) => {
-        if (imagesSupported && Array.from(e.dataTransfer.types).includes("Files")) {
+        if ((imagesSupported || caps?.media.uploads) && Array.from(e.dataTransfer.types).includes("Files")) {
           e.preventDefault();
           setDragging(true);
         }
@@ -191,7 +192,12 @@ export function Composer(props: Props) {
                 type="button"
                 className="dash-attachment__remove"
                 aria-label={`Remove ${u.name}`}
-                onClick={() => setUploads((prev) => prev.filter((x) => x.upload_id !== u.upload_id))}
+                onClick={() => {
+                  setUploads((prev) => prev.filter((x) => x.upload_id !== u.upload_id));
+                  void api.deleteUpload(props.profileQs, u.upload_id).catch((e) =>
+                    props.onError(e instanceof DashApiError ? `${u.name}: ${e.message}` : `${u.name}: could not remove upload.`),
+                  );
+                }}
               >
                 ×
               </button>
@@ -264,7 +270,11 @@ export function Composer(props: Props) {
             Stop
           </Btn>
         ) : (
-          <Btn type="submit" disabled={busy || sending || !online || (!text.trim() && images.length === 0)} aria-label="Send message">
+          <Btn
+            type="submit"
+            disabled={busy || sending || !online || (!text.trim() && images.length === 0 && uploads.length === 0)}
+            aria-label="Send message"
+          >
             {sending ? "Sending…" : "Send"}
           </Btn>
         )}

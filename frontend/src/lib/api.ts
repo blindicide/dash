@@ -226,4 +226,6 @@ export const api = {
     if (!res.ok) throw await parseError(res);
     return ((await res.json()) as { upload: UploadRef }).upload;
   },
+  deleteUpload: (profile: string | null, uploadId: string) =>
+    call<{ deleted: boolean }>("DELETE", `/uploads/${encodeURIComponent(uploadId)}`, { profile }),
 };

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, DashApiError } from "../lib/api";
 import { applyEvent, isActive, markApprovalPending, markApprovalSubmitting, newRun, TERMINAL, type RunView } from "../lib/runState";
 import { RunStream, type StreamState } from "../lib/stream";
-import { local, pendingKey, readPending, tab, type PendingSubmission } from "../lib/storage";
+import { local, pendingKey, readPending, submissionFingerprint, tab, type PendingSubmission } from "../lib/storage";
 import type {
   ApprovalChoice,
   Capabilities,
@@ -139,28 +139,30 @@ export function useDash(): DashController {
 
   const loadSessions = useCallback(
     async (p: string | null, myGen: number, offset = 0) => {
+      const stillCurrentProfile = () => pqsFor(profileRef.current) === p;
       setSessionsLoading(true);
       try {
         const res = await api.sessions(p, 50, offset);
-        if (gen.current !== myGen && offset === 0) return;
+        if (!stillCurrentProfile()) return;
         setSessions((prev) => (offset === 0 ? res.sessions : [...prev, ...res.sessions.filter((s) => !prev.some((x) => x.id === s.id))]));
         setSessionsHasMore(res.has_more);
       } catch (e) {
-        if (gen.current === myGen) setNotice(describe(e));
+        if (stillCurrentProfile() && gen.current === myGen) setNotice(describe(e));
       } finally {
-        setSessionsLoading(false);
+        if (stillCurrentProfile()) setSessionsLoading(false);
       }
     },
-    [],
+    [pqsFor],
   );
 
-  const refreshBotChat = useCallback(async (p: string | null) => {
+  const refreshBotChat = useCallback(async (p: string | null, myGen: number) => {
     try {
-      setBotChat((await api.botChat(p)).session);
+      const found = (await api.botChat(p)).session;
+      if (gen.current === myGen || pqsFor(profileRef.current) === p) setBotChat(found);
     } catch {
-      setBotChat(null);
+      if (gen.current === myGen || pqsFor(profileRef.current) === p) setBotChat(null);
     }
-  }, []);
+  }, [pqsFor]);
 
   const reloadMessages = useCallback(async (p: string | null, sid: string, myGen: number) => {
     setMessagesLoading(true);
@@ -298,6 +300,7 @@ export function useDash(): DashController {
       setMessages([]);
       setRun(null);
       setNotice(null);
+      setSending(false);
       const p = pqsFor(name);
       try {
         const [st, cp, state] = await Promise.all([
@@ -312,7 +315,7 @@ export function useDash(): DashController {
         setCaps(cp.capabilities);
         setPrefs({ ...DEFAULT_PREFS, ...state.preferences });
         void loadSessions(p, myGen);
-        void refreshBotChat(p);
+        void refreshBotChat(p, myGen);
         if (state.last_session_id) await openSessionFor(name, state.last_session_id, myGen);
       } catch (e) {
         if (gen.current !== myGen) return;
@@ -407,14 +410,17 @@ export function useDash(): DashController {
   }, [closeStream]);
 
   const openBotChat = useCallback(async () => {
-    const p = pqsFor(profileRef.current);
+    const pName = profileRef.current;
+    const p = pqsFor(pName);
+    const myGen = gen.current;
     try {
       const res = await api.ensureBotChat(p);
+      if (gen.current !== myGen || profileRef.current !== pName) return;
       setBotChat(res.session);
       if (res.created) setNotice({ kind: "info", text: "Created the canonical Bot Chat for this profile." });
       await openSession(res.session.id);
     } catch (e) {
-      setNotice(describe(e));
+      if (gen.current === myGen) setNotice(describe(e));
     }
   }, [openSession, pqsFor]);
 
@@ -441,9 +447,16 @@ export function useDash(): DashController {
           setSessions((prev) => [created.session, ...prev.filter((s) => s.id !== created.session.id)]);
         }
         // Reuse the request id of an unconfirmed identical submission (network retry).
+        const fingerprint = await submissionFingerprint({
+          text,
+          images: images.map((i) => ({ mime: i.mime, data: i.data })),
+          uploads: uploads.map((u) => u.upload_id),
+          model: model ?? null,
+        });
+        if (gen.current !== myGen) return false;
         const pending = readPending(pName, sid);
-        const crid = pending && pending.text === text && images.length === 0 ? pending.clientRequestId : uuid();
-        const record: PendingSubmission = { sessionId: sid, clientRequestId: crid, text, at: Date.now() };
+        const crid = pending?.fingerprint === fingerprint ? pending.clientRequestId : uuid();
+        const record: PendingSubmission = { sessionId: sid, clientRequestId: crid, fingerprint, at: Date.now() };
         tab.set(pendingKey(pName, sid), JSON.stringify(record));
         const view = newRun(sid, text, images.map((i) => `data:${i.mime};base64,${i.data}`));
         setRun(view);
@@ -464,6 +477,7 @@ export function useDash(): DashController {
         attachRun(p, res.run_id, started, myGen);
         return true;
       } catch (e) {
+        if (gen.current !== myGen) return false;
         setRun((prev) => (prev && prev.status === "submitting" ? null : prev));
         const n = describe(e);
         setNotice(n);
@@ -482,11 +496,14 @@ export function useDash(): DashController {
   const stop = useCallback(async () => {
     const view = runRef.current;
     if (!view?.runId) return;
+    const myGen = gen.current;
+    const p = pqsFor(profileRef.current);
     try {
-      const res = await api.stop(pqsFor(profileRef.current), view.runId);
+      const res = await api.stop(p, view.runId);
+      if (gen.current !== myGen) return;
       setRun((prev) => (prev && prev.runId === view.runId && !TERMINAL.has(prev.status) ? { ...prev, status: res.status === "stopping" ? "stopping" : prev.status } : prev));
     } catch (e) {
-      setNotice(describe(e));
+      if (gen.current === myGen) setNotice(describe(e));
     }
   }, [pqsFor]);
 
@@ -495,15 +512,19 @@ export function useDash(): DashController {
       const view = runRef.current;
       const card = view?.approvals[cardId];
       if (!view?.runId || !card || card.state !== "pending") return;
+      const myGen = gen.current;
+      const p = pqsFor(profileRef.current);
       setRun((prev) => (prev ? markApprovalSubmitting(prev, cardId) : prev));
       try {
-        await api.approve(pqsFor(profileRef.current), view.runId, choice, card.requestId);
+        await api.approve(p, view.runId, choice, card.requestId);
+        if (gen.current !== myGen) return;
         setRun((prev) =>
           prev
             ? applyEvent(prev, { type: "approval_resolved", seq: null, choice, request_id: card.requestId })
             : prev,
         );
       } catch (e) {
+        if (gen.current !== myGen) return;
         setRun((prev) => (prev ? markApprovalPending(prev, cardId) : prev));
         setNotice(describe(e));
       }
@@ -513,14 +534,17 @@ export function useDash(): DashController {
 
   const mutateSession = useCallback(
     async (id: string, fields: { title?: string; pinned?: boolean; archived?: boolean }) => {
+      const myGen = gen.current;
+      const p = pqsFor(profileRef.current);
       try {
-        const res = await api.patchSession(pqsFor(profileRef.current), id, fields);
+        const res = await api.patchSession(p, id, fields);
+        if (gen.current !== myGen) return;
         setSessions((prev) =>
           fields.archived ? prev.filter((s) => s.id !== id) : prev.map((s) => (s.id === id ? res.session : s)),
         );
         if (currentRef.current === id) setCurrent(res.session);
       } catch (e) {
-        setNotice(describe(e));
+        if (gen.current === myGen) setNotice(describe(e));
       }
     },
     [pqsFor],
@@ -528,12 +552,15 @@ export function useDash(): DashController {
 
   const deleteSession = useCallback(
     async (id: string) => {
+      const myGen = gen.current;
+      const p = pqsFor(profileRef.current);
       try {
-        await api.deleteSession(pqsFor(profileRef.current), id);
+        await api.deleteSession(p, id);
+        if (gen.current !== myGen) return;
         setSessions((prev) => prev.filter((s) => s.id !== id));
         if (currentRef.current === id) newChat();
       } catch (e) {
-        setNotice(describe(e));
+        if (gen.current === myGen) setNotice(describe(e));
       }
     },
     [newChat, pqsFor],
@@ -541,13 +568,16 @@ export function useDash(): DashController {
 
   const forkSession = useCallback(
     async (id: string) => {
+      const myGen = gen.current;
+      const p = pqsFor(profileRef.current);
       try {
-        const res = await api.fork(pqsFor(profileRef.current), id);
+        const res = await api.fork(p, id);
+        if (gen.current !== myGen) return;
         setSessions((prev) => [res.session, ...prev]);
         await openSession(res.session.id);
         setNotice({ kind: "info", text: "Forked into a new branch. The original conversation was kept." });
       } catch (e) {
-        setNotice(describe(e));
+        if (gen.current === myGen) setNotice(describe(e));
       }
     },
     [openSession, pqsFor],
@@ -568,12 +598,15 @@ export function useDash(): DashController {
 
   const updatePrefs = useCallback(
     async (patch: Partial<Preferences>) => {
+      const myGen = gen.current;
+      const p = pqsFor(profileRef.current);
       setPrefs((prev) => ({ ...prev, ...patch }));
       try {
-        const res = await api.setPreferences(pqsFor(profileRef.current), patch);
+        const res = await api.setPreferences(p, patch);
+        if (gen.current !== myGen) return;
         setPrefs(res.preferences);
       } catch (e) {
-        setNotice(describe(e));
+        if (gen.current === myGen) setNotice(describe(e));
       }
     },
     [pqsFor],

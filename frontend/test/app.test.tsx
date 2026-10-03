@@ -96,6 +96,79 @@ test("profile switch isolates state and scopes every request", async () => {
   expect(window.localStorage.getItem("hermes-dash:profile")).toBe("work");
 });
 
+test("a late load-more response from the old profile is discarded", async () => {
+  const upstream = bff.fetch;
+  let release!: () => void;
+  let started!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const requested = new Promise<void>((resolve) => (started = resolve));
+  window.__HERMES_PLUGIN_SDK__!.authedFetch = async (url, init = {}) => {
+    const u = new URL(url, "http://dash.test");
+    if (u.pathname === "/api/plugins/dash/sessions" && !u.searchParams.has("profile")) {
+      if (u.searchParams.get("offset") === "0") {
+        return new Response(JSON.stringify({ sessions: bff.sessions, has_more: true }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      started();
+      await gate;
+      return new Response(
+        JSON.stringify({ sessions: [{ id: "late-default", title: "Private default chat", is_bot_chat: false }], has_more: false }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return upstream(url, init);
+  };
+  render(<DashApp />);
+  await screen.findByText("hello from the CLI");
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+  await requested;
+  fireEvent.change(screen.getByLabelText("Hermes profile"), { target: { value: "work" } });
+  await screen.findByText("Start a conversation with Hermes");
+  release();
+  await act(async () => undefined);
+  expect(screen.queryByText("Private default chat")).toBeNull();
+});
+
+test("an accepted first message does not reappear as the next new-chat draft", async () => {
+  render(<DashApp />);
+  await screen.findByText("hello from the CLI");
+  fireEvent.click(screen.getByRole("button", { name: /New chat/ }));
+  const box = screen.getByLabelText("Message Hermes");
+  fireEvent.change(box, { target: { value: "one-time draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(runEvents()).toHaveLength(1));
+  fireEvent.click(screen.getByRole("button", { name: /New chat/ }));
+  await waitFor(() => expect(screen.getByLabelText("Message Hermes")).toHaveValue(""));
+});
+
+test("a lost image submission retries with the same client request id", async () => {
+  const upstream = bff.fetch;
+  let first = true;
+  window.__HERMES_PLUGIN_SDK__!.authedFetch = async (url, init = {}) => {
+    const u = new URL(url, "http://dash.test");
+    if (u.pathname === "/api/plugins/dash/runs" && (init.method ?? "GET") === "POST" && first) {
+      first = false;
+      await upstream(url, init); // Hermes accepted it; only the browser lost the response.
+      throw new TypeError("connection dropped after acceptance");
+    }
+    return upstream(url, init);
+  };
+  const { container } = render(<DashApp />);
+  await screen.findByText("hello from the CLI");
+  const input = container.querySelector<HTMLInputElement>('input[type="file"][accept*="image/png"]')!;
+  const file = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], "pixel.png", { type: "image/png" });
+  fireEvent.change(input, { target: { files: [file] } });
+  await screen.findByAltText("Preview of pixel.png");
+  fireEvent.change(screen.getByLabelText("Message Hermes"), { target: { value: "inspect image" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText(/Network disconnected/);
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(bff.calls.filter((c) => c.path === "/runs")).toHaveLength(2));
+  const sends = bff.calls.filter((c) => c.path === "/runs").map((c) => c.body as { client_request_id: string });
+  expect(sends[1]!.client_request_id).toBe(sends[0]!.client_request_id);
+});
+
 test("Ctrl+K opens search without intercepting plain Ctrl+N", async () => {
   render(<DashApp />);
   await screen.findByText("hello from the CLI");
