@@ -177,24 +177,24 @@ export function useDash(): DashController {
 
   const finishRun = useCallback(
     async (p: string | null, view: RunView, myGen: number) => {
-    tab.set(pendingKey(profileRef.current, view.sessionId), null);
-    if (view.status === "failed") {
-      setNotice({ kind: "error", text: view.error ? `Run failed: ${view.error}` : "The run failed." });
-    } else if (view.status === "interrupted") {
-      setNotice({ kind: "warning", text: "The run was interrupted (Hermes restarted or the run expired)." });
-    }
-    await reloadMessages(p, view.sessionId, myGen);
-    if (gen.current !== myGen) return;
-    // Hermes may have generated a title during the turn.
-    void api.session(p, view.sessionId).then(
-      (res) => gen.current === myGen && currentRef.current === view.sessionId && setCurrent(res.session),
-      () => undefined,
-    );
-    // Keep the settled live view only if the transcript did not load (e.g. offline).
-    setRun((prev) => (prev && prev.runId === view.runId && TERMINAL.has(prev.status) ? null : prev));
-    streamRef.current?.close();
-    streamRef.current = null;
-    void loadSessions(p, myGen);
+      tab.set(pendingKey(profileRef.current, view.sessionId), null);
+      if (view.status === "failed") {
+        setNotice({ kind: "error", text: view.error ? `Run failed: ${view.error}` : "The run failed." });
+      } else if (view.status === "interrupted") {
+        setNotice({ kind: "warning", text: "The run was interrupted (Hermes restarted or the run expired)." });
+      }
+      await reloadMessages(p, view.sessionId, myGen);
+      if (gen.current !== myGen) return;
+      // Hermes may have generated a title during the turn.
+      void api.session(p, view.sessionId).then(
+        (res) => gen.current === myGen && currentRef.current === view.sessionId && setCurrent(res.session),
+        () => undefined,
+      );
+      // Keep the settled live view only if the transcript did not load (e.g. offline).
+      setRun((prev) => (prev && prev.runId === view.runId && TERMINAL.has(prev.status) ? null : prev));
+      streamRef.current?.close();
+      streamRef.current = null;
+      void loadSessions(p, myGen);
       },
     [loadSessions, reloadMessages],
   );
