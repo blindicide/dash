@@ -7,10 +7,14 @@
  *   replays exactly what was missed (its backlog keeps the last 1000 events), and duplicates
  *   are dropped client-side.
  * - Reconnect with capped exponential backoff; wake immediately on `online` /
- *   `visibilitychange`. When streaming is impossible (SDK without authedFetch) it degrades to
- *   polling the run status, which still surfaces approvals and the final answer.
+ *   `visibilitychange`. Hermes sends a keepalive every 10 s (forwarded by the BFF), so a
+ *   silent connection — typical after phone sleep or a network change leaves it half-open —
+ *   is aborted and resumed instead of hanging in "open". When streaming is impossible (SDK
+ *   without authedFetch) it degrades to polling the run status, which still surfaces
+ *   approvals and the final answer.
  */
 import { api, BFF, DashApiError, rawFetch, supportsStreaming, withProfile } from "./api";
+import { TERMINAL } from "./runState";
 import { SSEParser } from "./sse";
 import type { RunEvent, RunRecord } from "./types";
 
@@ -27,6 +31,10 @@ export interface RunStreamOptions {
 const MAX_BACKOFF_MS = 15_000;
 const POLL_MS = 2_000;
 const STATUS_CHECK_AFTER_FAILURES = 4;
+/** No bytes (not even a keepalive) for this long: the connection is dead. */
+const IDLE_TIMEOUT_MS = 45_000;
+/** On wake, a connection silent for longer than one keepalive interval is presumed stale. */
+const STALE_ON_WAKE_MS = 15_000;
 
 export class RunStream {
   private closed = false;
@@ -34,6 +42,9 @@ export class RunStream {
   private wake: (() => void) | null = null;
   private lastSeq: number | null;
   private failures = 0;
+  private lastActivity = 0;
+  private reading = false;
+  private sawTerminal = false;
   private readonly opts: RunStreamOptions;
 
   constructor(opts: RunStreamOptions) {
@@ -63,7 +74,9 @@ export class RunStream {
   }
 
   private onWake(): void {
-    if (document.visibilityState === "visible" && navigator.onLine !== false) this.wake?.();
+    if (document.visibilityState !== "visible" || navigator.onLine === false) return;
+    if (this.reading && Date.now() - this.lastActivity > STALE_ON_WAKE_MS) this.abort?.abort();
+    this.wake?.();
   }
 
   private setState(state: StreamState, detail?: string): void {
@@ -86,11 +99,13 @@ export class RunStream {
       if (this.lastSeq !== null && event.seq <= this.lastSeq) return; // replay duplicate
       this.lastSeq = event.seq;
     }
+    if (event.type === "run" && TERMINAL.has(String(event.status))) this.sawTerminal = true;
     this.opts.onEvent(event);
   }
 
   private finishFromStatus(run: RunRecord): boolean {
     if (!run.terminal) return false;
+    this.sawTerminal = true;
     this.opts.onEvent({
       type: "run",
       seq: null,
@@ -124,9 +139,14 @@ export class RunStream {
       const outcome = await this.connectOnce();
       if (this.closed) break;
       if (outcome === "done") {
-        this.close();
-        this.setState("closed");
-        return;
+        // The stream ended; make sure the UI saw how the run settled before closing.
+        const status = this.sawTerminal ? "terminal" : await this.checkStatus();
+        if (this.closed) break;
+        if (status !== "active" && status !== "unknown") {
+          this.close();
+          this.setState(status === "gone" ? "failed" : "closed", status === "gone" ? "run_not_found" : undefined);
+          return;
+        }
       }
       if (outcome === "fatal") {
         this.close();
@@ -170,9 +190,16 @@ export class RunStream {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     const parser = new SSEParser();
+    const abort = this.abort;
+    this.lastActivity = Date.now();
+    this.reading = true;
+    const watchdog = window.setInterval(() => {
+      if (Date.now() - this.lastActivity > IDLE_TIMEOUT_MS) abort.abort();
+    }, 5_000);
     try {
       for (;;) {
         const { value, done } = await reader.read();
+        this.lastActivity = Date.now();
         if (done) return "retry"; // dropped without the terminal marker
         for (const frame of parser.feed(decoder.decode(value, { stream: true }))) {
           if (frame.data === null) continue;
@@ -197,6 +224,8 @@ export class RunStream {
     } catch {
       return "retry";
     } finally {
+      this.reading = false;
+      window.clearInterval(watchdog);
       try {
         reader.releaseLock();
       } catch {

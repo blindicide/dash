@@ -204,21 +204,24 @@ export function useDash(): DashController {
   const attachRun = useCallback(
     (p: string | null, runId: string, view: RunView, myGen: number) => {
       streamRef.current?.close();
+      let settled = false;
       const stream = new RunStream({
         profile: p,
         runId,
         lastSeq: view.lastSeq,
         onEvent: (event) => {
           if (gen.current !== myGen) return;
-          setRun((prev) => {
-            if (!prev || prev.runId !== runId) return prev;
-            const next = applyEvent(prev, event);
-            if (TERMINAL.has(next.status) && !TERMINAL.has(prev.status)) {
-              // Canonical transcript comes from Hermes once the run settles.
-              void finishRun(p, next, myGen);
-            }
-            return next;
-          });
+          setRun((prev) => (prev && prev.runId === runId ? applyEvent(prev, event) : prev));
+          // Only "run" events settle a run. Finish outside the (pure) state updater, once.
+          if (!settled && event.type === "run" && TERMINAL.has(String(event.status))) {
+            settled = true;
+            // Canonical transcript comes from Hermes once the run settles.
+            void finishRun(
+              p,
+              { ...view, runId, status: event.status as RunView["status"], error: event.error ?? view.error },
+              myGen,
+            );
+          }
         },
         onState: (state, detail) => {
           if (gen.current !== myGen) return;
@@ -226,7 +229,8 @@ export function useDash(): DashController {
           if (state === "failed" && detail === "dashboard_auth_expired") {
             setNotice({ kind: "error", text: "Your Dashboard session expired. Reload the page to sign in again.", code: detail });
           }
-          if (state === "failed" && detail === "run_not_found") {
+          if (state === "failed" && detail === "run_not_found" && !settled) {
+            settled = true;
             void finishRun(p, { ...view, status: "interrupted" }, myGen);
           }
         },
@@ -254,12 +258,17 @@ export function useDash(): DashController {
         const [sess, msgs, active] = await Promise.all([
           api.session(p, id),
           api.messages(p, id),
-          api.activeRun(p, id).catch(() => ({ run: null }) as { run: null }),
+          api.activeRun(p, id).catch(() => ({ run: null }) as { run: null; client_request_id?: string }),
         ]);
         if (gen.current !== myGen) return;
         setCurrent(sess.session);
         setMessages(msgs.messages);
         const activeRun = active.run;
+        // Hermes has the run behind an unconfirmed submission (its response was lost): an
+        // identical message typed later is a new turn, not a retry of that one.
+        if (active.client_request_id && readPending(pName, id)?.clientRequestId === active.client_request_id) {
+          tab.set(pendingKey(pName, id), null);
+        }
         if (activeRun && !activeRun.terminal) {
           // Re-attach only. lastSeq=null replays Hermes' retained backlog for this run, which
           // rebuilds the live view (including a still-pending approval) without resending.
@@ -438,6 +447,9 @@ export function useDash(): DashController {
         let sid = currentRef.current;
         if (!sid) {
           const created = await api.createSession(p);
+          // The user switched profile or chat meanwhile: never adopt (or send into) a session
+          // of the previous view. The empty Hermes session stays like any unused new chat.
+          if (gen.current !== myGen || profileRef.current !== pName) return false;
           sid = created.session.id;
           myGen = ++gen.current;
           setCurrentId(sid);

@@ -39,6 +39,8 @@ export function Composer(props: Props) {
   const imagesSupported = Boolean(caps?.media.images) && caps?.runs.submit;
   const maxBytes = caps?.media.image_max_bytes ?? 5 * 1024 * 1024;
   const maxCount = caps?.media.image_max_count ?? 4;
+  // Hermes caps the whole run request body, so images of one message share a budget.
+  const maxTotal = caps?.media.image_total_max_bytes ?? 7_000_000;
 
   // Restore the draft that belongs to this profile/session (drafts survive reloads in-tab).
   const textRef = useRef(text);
@@ -100,6 +102,11 @@ export function Composer(props: Props) {
       if (images.length + accepted.length >= maxCount) {
         props.onError(`At most ${maxCount} images per message.`);
         break;
+      }
+      const total = [...images, ...accepted].reduce((sum, i) => sum + i.size, 0) + f.size;
+      if (total > maxTotal) {
+        props.onError(`${f.name || "image"} would bring this message's images over ${formatBytes(maxTotal)}.`);
+        continue;
       }
       accepted.push({
         id: uuid(),

@@ -25,6 +25,7 @@ export class FakeBff {
   };
   lastSession: Record<string, string | null> = { default: "s_old", work: null };
   activeRun: Record<string, string> = {};
+  runStatus: Record<string, string> = {};
   streams: Record<string, ReadableStreamDefaultController<Uint8Array>[]> = {};
   runCount = 0;
   enc = new TextEncoder();
@@ -120,7 +121,8 @@ export class FakeBff {
       }
       if (r[2] === "/approval") return json({ choice: (body as { choice: string }).choice, resolved: 1 });
       if (r[2] === "/stop") return json({ run_id: rid, status: "stopping" });
-      return json({ run: { run_id: rid, status: "running", session_id: null, terminal: false } });
+      const status = this.runStatus[rid] ?? "running";
+      return json({ run: { run_id: rid, status, session_id: null, terminal: status !== "running" } });
     }
     return json({ error: { code: "nope", message: `unhandled ${method} ${path}` } }, 404);
   };

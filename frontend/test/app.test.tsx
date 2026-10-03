@@ -178,3 +178,44 @@ test("Ctrl+K opens search without intercepting plain Ctrl+N", async () => {
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
   expect(await screen.findByRole("searchbox", { name: "Search conversations" })).toBeInTheDocument();
 });
+
+test("a stream that ends without a terminal event settles the run from Hermes status", async () => {
+  render(<DashApp />);
+  await screen.findByText("hello from the CLI");
+  fireEvent.change(screen.getByLabelText("Message Hermes"), { target: { value: "quick one" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(runEvents()).toHaveLength(1));
+  const rid = "run_" + "1".padStart(32, "0");
+  bff.runStatus[rid] = "completed";
+  bff.messages.s_old!.push({ id: 3, role: "user", content: "quick one" }, { id: 4, role: "assistant", content: "Settled answer." });
+  act(() => bff.end(rid));
+  expect(await screen.findByText("Settled answer.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Stop the running agent" })).toBeNull();
+});
+
+test("switching profile while a new chat's session is being created never sends into it", async () => {
+  const upstream = bff.fetch;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let creating = false;
+  window.__HERMES_PLUGIN_SDK__!.authedFetch = async (url, init = {}) => {
+    const u = new URL(url, "http://dash.test");
+    if (u.pathname === "/api/plugins/dash/sessions" && (init.method ?? "GET") === "POST") {
+      creating = true;
+      await gate;
+    }
+    return upstream(url, init);
+  };
+  render(<DashApp />);
+  await screen.findByText("hello from the CLI");
+  fireEvent.click(screen.getByRole("button", { name: /New chat/ }));
+  fireEvent.change(screen.getByLabelText("Message Hermes"), { target: { value: "for the default profile" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(creating).toBe(true));
+  fireEvent.change(screen.getByLabelText("Hermes profile"), { target: { value: "work" } });
+  await screen.findByText("Start a conversation with Hermes");
+  release();
+  await act(async () => undefined);
+  expect(bff.calls.some((c) => c.path === "/runs")).toBe(false);
+  expect(screen.getByText("Start a conversation with Hermes")).toBeInTheDocument();
+});

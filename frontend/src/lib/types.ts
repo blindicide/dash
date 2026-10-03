@@ -72,6 +72,7 @@ export interface Capabilities {
     images: string | false;
     image_max_bytes: number;
     image_max_count: number;
+    image_total_max_bytes?: number;
     uploads: boolean;
     upload_max_bytes: number;
   };
