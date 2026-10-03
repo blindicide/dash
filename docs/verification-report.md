@@ -1,4 +1,4 @@
-# dash 1.0.0 verification report
+# dash 1.0.1 verification report
 
 Date: 2026-10-03 (Europe/Amsterdam)
 Scope: release verification of the complete source tree, release metadata, documentation,
@@ -9,15 +9,20 @@ integration suites itself, fixed the defects listed below, and verified the **in
 release archive** against real Hermes. Every result in this report was produced by a command
 that was actually run. Nothing is carried over unverified.
 
+1.0.1 differs from 1.0.0 only in the release workflow and the version strings. The pushed
+annotated `v1.0.0` tag's release job stopped at its tag-type check (`actions/checkout`
+fetched the tag without its tag object), so **no GitHub Release or archives exist for
+v1.0.0**. The real-Hermes and browser suites were re-run against the installed 1.0.1 archive (run C).
+
 ## Verdict
 
-The 1.0.0 candidate meets the documented dash mandate for the Hermes surfaces that the
+The 1.0.1 release meets the documented dash mandate for the Hermes surfaces that the
 tested source exposes. The browser remains a presentation layer: Hermes owns sessions,
 history, runs, profiles, models, tools and approvals. dash keeps only disposable UI pointers,
 preferences and tab-scoped drafts/retry metadata. No parallel conversation database or
 browser-visible Hermes credential was found.
 
-The release archive, installed with its own `install.sh` into a fresh Hermes home, passed
+The 1.0.1 release archive, installed with its own `install.sh` into a fresh Hermes home, passed
 **19/19 API-level checks and 7/7 real-Chromium checks** against the installed Hermes gateway
 API server and Dashboard. Everything except the model provider was real: the plugin loader,
 session store, run engine, SSE stream, tools, approval gate and profile multiplexer. The model
@@ -28,7 +33,7 @@ provider was a deterministic OpenAI-compatible stub. This is real Hermes/browser
 
 | Component | Tested value |
 |---|---|
-| dash | 1.0.0 (release commit `8cfe479`) |
+| dash | 1.0.1 (release commit `8b62d2d`; 1.0.0 at `8cfe479`) |
 | Hermes runtime | `Hermes Agent v0.21.5+6579.g3d0a61a (2026.9.24) Â· upstream 3d0a61ac` |
 | Hermes source | `3d0a61ac94e1181985177fdd975c4efeb478e9b7`; `git describe`: `v0.21.4+canary.20261003T070620Z-355-g3d0a61ac94` (checkout clean) |
 | Dashboard SDK | contract 1.1.0 (`web/src/plugins/registry.ts`) |
@@ -48,7 +53,7 @@ Hermes launcher shim checksum was identical before and after (`f773bf77dda103d8â
 | Command | Result |
 |---|---|
 | `npm ci --include=dev` | pass; npm audit: 0 vulnerabilities |
-| `npm run check` | pass: version consistency (all six sources 1.0.0), ESLint, TypeScript, Vitest **6 files / 25 tests**, Vite production build (`index.js` 109 kB, `style.css` 15 kB) |
+| `npm run check` | pass (re-run at 1.0.1): version consistency (all six sources), ESLint, TypeScript, Vitest **6 files / 25 tests**, Vite production build (`index.js` 109 kB, `style.css` 15 kB) |
 | bundle guard (as in CI) | pass: no `react.production` in `dist/index.js`; `__HERMES_PLUGIN_SDK__` referenced |
 | `uv sync --locked` | pass |
 | `uv run ruff check .` / `uv run ruff format --check .` | pass / pass (32 files) |
@@ -76,8 +81,8 @@ operator's services):
 
 ```bash
 bash scripts/package.sh                                  # clean committed tree
-tar -xzf release/dash-v1.0.0.tar.gz -C "$PKG"
-"$PKG/dash-v1.0.0/install.sh" --hermes-home "$DASH_IT_DIR/home"   # real directory, not a symlink
+tar -xzf release/dash-v1.0.1.tar.gz -C "$PKG"
+"$PKG/dash-v1.0.1/install.sh" --hermes-home "$DASH_IT_DIR/home"   # real directory, not a symlink
 scripts/integration/env.sh up                            # keeps the installed plugins/dash
 uv run python scripts/integration/e2e.py --report "$DASH_IT_DIR/e2e-report.json"
 node scripts/integration/browser_e2e.mjs
@@ -87,15 +92,16 @@ scripts/integration/env.sh down
 | Run | Plugin under test | API suite | Browser suite |
 |---|---|---|---|
 | A (re-check of the inherited tree before fixes) | working tree at `ff2cae7` + inherited 1.0.0 changes (symlink) | 19/19 at 2026-10-03T16:54:08Z | 7/7 at 2026-10-03T16:54:38Z |
-| B (release evidence) | **installed archive** `dash-v1.0.0.tar.gz` built from `8cfe479` | **19/19 at 2026-10-03T17:04:41Z** | **7/7 at 2026-10-03T17:05:06Z** |
+| B (after the audit fixes) | installed archive `dash-v1.0.0.tar.gz` built from `8cfe479` | 19/19 at 2026-10-03T17:04:41Z | 7/7 at 2026-10-03T17:05:06Z |
+| C (release evidence) | **installed archive** `dash-v1.0.1.tar.gz` built from `8b62d2d` | **19/19 at 2026-10-03T17:13:30Z** | **7/7 at 2026-10-03T17:13:55Z** |
 
-In run B, Hermes compiled `__pycache__` inside the installed `plugins/dash/dashboard/`, which
+In runs B and C, Hermes compiled `__pycache__` inside the installed `plugins/dash/dashboard/`, which
 confirms that the BFF was imported from the installed copy.
 
 API-level checks (each asserts on the real Hermes response, not on a dash echo):
 
 - Dashboard auth gate (401 without session token) and plugin runtime gate;
-- manifest, BFF and displayed version all 1.0.0; real Hermes reachable;
+- manifest, BFF and displayed version identical (1.0.1 in run C); real Hermes reachable;
 - API key absent from every browser-facing response;
 - mutation header and exact-origin refusal;
 - native `/v1/runs` send with streamed SSE answer and integer `seq` ids;
@@ -120,7 +126,7 @@ API-level checks (each asserts on the real Hermes response, not on a dash echo):
 
 Browser checks (real Chromium inside the real Dashboard):
 
-- plugin rendered as `\ dash v1.0.0`, Connected;
+- plugin rendered as `\ dash v<version>` (v1.0.1 in run C), Connected;
 - browser send displayed the streamed answer;
 - reload during an active run re-attached without a duplicate user turn;
 - the approval card required an explicit Deny click;
