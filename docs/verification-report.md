@@ -1,4 +1,4 @@
-# dash 1.0.1 verification report
+# dash 1.0.2 verification report
 
 Date: 2026-10-03 (Europe/Amsterdam)
 Scope: release verification of the complete source tree, release metadata, documentation,
@@ -9,20 +9,29 @@ integration suites itself, fixed the defects listed below, and verified the **in
 release archive** against real Hermes. Every result in this report was produced by a command
 that was actually run. Nothing is carried over unverified.
 
-1.0.1 differs from 1.0.0 only in the release workflow and the version strings. The pushed
-annotated `v1.0.0` tag's release job stopped at its tag-type check (`actions/checkout`
-fetched the tag without its tag object), so **no GitHub Release or archives exist for
-v1.0.0**. The real-Hermes and browser suites were re-run against the installed 1.0.1 archive (run C).
+Release history on 2026-10-03. 1.0.1 and 1.0.2 change only the release tooling and the
+version strings; the plugin source is the same as 1.0.0.
+
+- **v1.0.0:** the annotated tag's release job stopped at its tag-type check, because
+  `actions/checkout` fetched the tag without its tag object. **No GitHub Release or archives
+  exist for v1.0.0.**
+- **v1.0.1:** published, but its release job inherited `NODE_ENV=test`. The published
+  `dash-v1.0.1.tar.gz` therefore holds a development-transform `dist/index.js`: 373 JSX source
+  records with CI runner paths and line numbers, 132 kB instead of 110 kB. That bundle is
+  **not** the one verified here. Its source archive is correct.
+- **v1.0.2:** packaging always builds in production and refuses a development bundle. The
+  real-Hermes and browser suites were re-run against the installed 1.0.2 archive, which was
+  built with `NODE_ENV=test` deliberately set (run D).
 
 ## Verdict
 
-The 1.0.1 release meets the documented dash mandate for the Hermes surfaces that the
+The 1.0.2 release meets the documented dash mandate for the Hermes surfaces that the
 tested source exposes. The browser remains a presentation layer: Hermes owns sessions,
 history, runs, profiles, models, tools and approvals. dash keeps only disposable UI pointers,
 preferences and tab-scoped drafts/retry metadata. No parallel conversation database or
 browser-visible Hermes credential was found.
 
-The 1.0.1 release archive, installed with its own `install.sh` into a fresh Hermes home, passed
+The 1.0.2 release archive, installed with its own `install.sh` into a fresh Hermes home, passed
 **19/19 API-level checks and 7/7 real-Chromium checks** against the installed Hermes gateway
 API server and Dashboard. Everything except the model provider was real: the plugin loader,
 session store, run engine, SSE stream, tools, approval gate and profile multiplexer. The model
@@ -33,7 +42,7 @@ provider was a deterministic OpenAI-compatible stub. This is real Hermes/browser
 
 | Component | Tested value |
 |---|---|
-| dash | 1.0.1 (release commit `8b62d2d`; 1.0.0 at `8cfe479`) |
+| dash | 1.0.2 (release commit `800e7d2`; 1.0.0 at `8cfe479`) |
 | Hermes runtime | `Hermes Agent v0.21.5+6579.g3d0a61a (2026.9.24) · upstream 3d0a61ac` |
 | Hermes source | `3d0a61ac94e1181985177fdd975c4efeb478e9b7`; `git describe`: `v0.21.4+canary.20261003T070620Z-355-g3d0a61ac94` (checkout clean) |
 | Dashboard SDK | contract 1.1.0 (`web/src/plugins/registry.ts`) |
@@ -53,7 +62,7 @@ Hermes launcher shim checksum was identical before and after (`f773bf77dda103d8�
 | Command | Result |
 |---|---|
 | `npm ci --include=dev` | pass; npm audit: 0 vulnerabilities |
-| `npm run check` | pass (re-run at 1.0.1): version consistency (all six sources), ESLint, TypeScript, Vitest **6 files / 25 tests**, Vite production build (`index.js` 109 kB, `style.css` 15 kB) |
+| `npm run check` | pass (re-run at 1.0.2): version consistency (all six sources), ESLint, TypeScript, Vitest **6 files / 25 tests**, Vite production build (`index.js` 109 kB, `style.css` 15 kB) |
 | bundle guard (as in CI) | pass: no `react.production` in `dist/index.js`; `__HERMES_PLUGIN_SDK__` referenced |
 | `uv sync --locked` | pass |
 | `uv run ruff check .` / `uv run ruff format --check .` | pass / pass (32 files) |
@@ -80,9 +89,9 @@ Commands (environment kept alive in a detached session, ports chosen to avoid th
 operator's services):
 
 ```bash
-bash scripts/package.sh                                  # clean committed tree
-tar -xzf release/dash-v1.0.1.tar.gz -C "$PKG"
-"$PKG/dash-v1.0.1/install.sh" --hermes-home "$DASH_IT_DIR/home"   # real directory, not a symlink
+NODE_ENV=test bash scripts/package.sh                    # clean committed tree; env ignored
+tar -xzf release/dash-v1.0.2.tar.gz -C "$PKG"
+"$PKG/dash-v1.0.2/install.sh" --hermes-home "$DASH_IT_DIR/home"   # real directory, not a symlink
 scripts/integration/env.sh up                            # keeps the installed plugins/dash
 uv run python scripts/integration/e2e.py --report "$DASH_IT_DIR/e2e-report.json"
 node scripts/integration/browser_e2e.mjs
@@ -93,15 +102,16 @@ scripts/integration/env.sh down
 |---|---|---|---|
 | A (re-check of the inherited tree before fixes) | working tree at `ff2cae7` + inherited 1.0.0 changes (symlink) | 19/19 at 2026-10-03T16:54:08Z | 7/7 at 2026-10-03T16:54:38Z |
 | B (after the audit fixes) | installed archive `dash-v1.0.0.tar.gz` built from `8cfe479` | 19/19 at 2026-10-03T17:04:41Z | 7/7 at 2026-10-03T17:05:06Z |
-| C (release evidence) | **installed archive** `dash-v1.0.1.tar.gz` built from `8b62d2d` | **19/19 at 2026-10-03T17:13:30Z** | **7/7 at 2026-10-03T17:13:55Z** |
+| C | installed archive `dash-v1.0.1.tar.gz` built locally from `8b62d2d` (production bundle) | 19/19 at 2026-10-03T17:13:30Z | 7/7 at 2026-10-03T17:13:55Z |
+| D (release evidence) | **installed archive** `dash-v1.0.2.tar.gz` built from `800e7d2` with `NODE_ENV=test` set | **19/19 at 2026-10-03T17:18:35Z** | **7/7 at 2026-10-03T17:19:00Z** |
 
-In runs B and C, Hermes compiled `__pycache__` inside the installed `plugins/dash/dashboard/`, which
+In runs B–D, Hermes compiled `__pycache__` inside the installed `plugins/dash/dashboard/`, which
 confirms that the BFF was imported from the installed copy.
 
 API-level checks (each asserts on the real Hermes response, not on a dash echo):
 
 - Dashboard auth gate (401 without session token) and plugin runtime gate;
-- manifest, BFF and displayed version identical (1.0.1 in run C); real Hermes reachable;
+- manifest, BFF and displayed version identical (the archive's version in each run); real Hermes reachable;
 - API key absent from every browser-facing response;
 - mutation header and exact-origin refusal;
 - native `/v1/runs` send with streamed SSE answer and integer `seq` ids;
@@ -126,7 +136,7 @@ API-level checks (each asserts on the real Hermes response, not on a dash echo):
 
 Browser checks (real Chromium inside the real Dashboard):
 
-- plugin rendered as `\ dash v<version>` (v1.0.1 in run C), Connected;
+- plugin rendered as `\ dash v<version>` with the archive's version, Connected;
 - browser send displayed the streamed answer;
 - reload during an active run re-attached without a duplicate user turn;
 - the approval card required an explicit Deny click;
@@ -151,6 +161,9 @@ fixed:
 | Stream end without a terminal event could leave the UI "running"; finish ran inside a React state updater | status check on stream end; finish once, outside the updater (`31d6199`) | component test |
 | Installer backup `dash.bak-*` stayed inside `plugins/` as a second plugin named `dash` (only sort order kept it inert) | backups move to `plugin-backups/` (`c965413`) | installer run twice into a scratch home |
 | Package copied untracked `docs/*.md` | only committed docs are packaged (`1620323`) | package listing |
+| Install archive permissions followed the builder's umask, so CI and local hashes differed | modes normalised (`64dc4d2`) | CI artifact `SHA256SUMS` identical to local |
+| Release job read the tag without its tag object (v1.0.0 release failed) | explicit tag fetch (`2403191`) | v1.0.1 release job passed the check |
+| Release job's `NODE_ENV=test` produced a development bundle (v1.0.1 asset) | production build forced, dev bundle refused, CI guard (`c10b17f`) | identical archive hash with `NODE_ENV` unset/`test`/`development`; guard exits 1 on a dev bundle |
 | 1.0.0 changelog codename was `backslash`; README claimed the approval card shows the "exact" command (Hermes redacts it) | codename `dash`; wording corrected (`8cfe479`, `92394af`) | — |
 
 ## API and security audit
