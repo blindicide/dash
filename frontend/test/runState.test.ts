@@ -53,3 +53,13 @@ test("completed output is used when nothing streamed; streamed commentary is not
   expect((v.timeline[1] as { text: string }).text).toBe("Final answer");
   expect(v.usage).toEqual({ total_tokens: 9 });
 });
+
+test("historical tool status is derived from the recorded result only", async () => {
+  const { historicToolStatus } = await import("../src/components/MessageItem");
+  expect(historicToolStatus('{"output": "", "exit_code": -1, "error": "BLOCKED: Command denied by user."}')).toBe("denied");
+  expect(historicToolStatus('{"output": "x", "exit_code": 2, "error": null}')).toBe("failed");
+  expect(historicToolStatus('{"output": "hello", "exit_code": 0, "error": null}')).toBe("completed");
+  expect(historicToolStatus("Error: no such file")).toBe("failed");
+  expect(historicToolStatus("plain output")).toBe("completed");
+  expect(historicToolStatus(undefined)).toBe("completed");
+});

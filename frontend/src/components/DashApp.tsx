@@ -11,27 +11,52 @@ import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { Btn } from "./ui";
 
-/** Fill the space below the host chrome so the composer stays pinned on every viewport. */
-function useFillHeight(ref: React.RefObject<HTMLDivElement | null>) {
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") return p;
+  }
+  return null;
+}
+
+/**
+ * Fill the visible space of the host's scroll container (the Dashboard renders plugin pages
+ * inside a scrollable <main>, below host chrome such as banners) so the composer stays on
+ * screen on every viewport. Re-measures when the container or viewport resizes, e.g. when
+ * a host banner is dismissed or the mobile keyboard opens.
+ */
+function useFillHeight(ref: React.RefObject<HTMLDivElement | null>, ready: boolean) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const container = scrollParent(el);
     const apply = () => {
-      const top = el.getBoundingClientRect().top + window.scrollY;
       const vh = window.visualViewport?.height ?? window.innerHeight;
-      el.style.height = `${Math.max(360, vh - Math.max(0, top - window.scrollY))}px`;
+      const bottom = container ? Math.min(container.getBoundingClientRect().bottom, vh) : vh;
+      // Ancestors between us and the container may add bottom padding (safe-area etc.).
+      let below = 0;
+      for (let p = el.parentElement; p && p !== container; p = p.parentElement) {
+        below += parseFloat(getComputedStyle(p).paddingBottom) || 0;
+      }
+      const scrolled = container?.scrollTop ?? 0;
+      const top = el.getBoundingClientRect().top + scrolled;
+      const containerTop = container ? container.getBoundingClientRect().top : 0;
+      const offset = top - containerTop;
+      const available = bottom - containerTop - offset - below;
+      el.style.height = `${Math.max(200, Math.floor(available))}px`;
     };
     apply();
     window.addEventListener("resize", apply);
     window.visualViewport?.addEventListener("resize", apply);
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
-    ro?.observe(document.body);
+    ro?.observe(container ?? document.body);
+    if (container?.firstElementChild) ro?.observe(container.firstElementChild);
     return () => {
       window.removeEventListener("resize", apply);
       window.visualViewport?.removeEventListener("resize", apply);
       ro?.disconnect();
     };
-  }, [ref]);
+  }, [ref, ready]);
 }
 
 export function DashApp() {
@@ -41,7 +66,7 @@ export function DashApp() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hermesOpen, setHermesOpen] = useState(false);
-  useFillHeight(root);
+  useFillHeight(root, !d.booting && !d.bootError);
 
   const closeOnMobile = useCallback(() => setSidebarOpen(false), []);
 

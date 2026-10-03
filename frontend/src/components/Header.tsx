@@ -74,11 +74,13 @@ export function Header({ status, profiles, profile, online, streamState, onProfi
           <span className="dash-conn__dot" aria-hidden="true" />
           <span className="dash-conn__label">{conn.label}</span>
         </span>
-        <Btn variant="ghost" size="sm" onClick={onHermes} aria-haspopup="dialog">
-          Hermes
+        <Btn variant="ghost" size="sm" onClick={onHermes} aria-haspopup="dialog" aria-label="Hermes context" title="Hermes context">
+          <span className="dash-hide-mobile">Hermes</span>
+          <span className="dash-show-mobile" aria-hidden="true">ⓘ</span>
         </Btn>
-        <Btn variant="ghost" size="sm" onClick={onSettings} aria-haspopup="dialog">
-          Settings
+        <Btn variant="ghost" size="sm" onClick={onSettings} aria-haspopup="dialog" aria-label="Settings" title="Settings">
+          <span className="dash-hide-mobile">Settings</span>
+          <span className="dash-show-mobile" aria-hidden="true">⚙</span>
         </Btn>
       </div>
     </header>

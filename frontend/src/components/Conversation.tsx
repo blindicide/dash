@@ -52,7 +52,7 @@ export function Conversation({ session, sessionId, messages, loading, run, showR
         <div className="dash-convo__title">
           <h2>{sessionTitle(session)}</h2>
           {session.is_bot_chat ? <span className="dash-badge dash-badge--secondary">Bot Chat</span> : null}
-          {session.source ? <span className="dash-muted dash-small">via {session.source}</span> : null}
+          {session.source ? <span className="dash-muted dash-small dash-hide-mobile">via {session.source}</span> : null}
         </div>
       ) : null}
       <div

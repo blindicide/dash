@@ -2,6 +2,9 @@
  * (--color-*, --theme-font-*, --radius) so dash follows the active theme; fallbacks only
  * apply on hosts without them. All selectors are prefixed `dash-` to avoid collisions. */
 
+.dash-show-mobile {
+  display: none;
+}
 .dash-root {
   --d-bg: var(--color-background, var(--background, #0b1416));
   --d-fg: var(--color-foreground, #e8e2d9);
@@ -24,7 +27,7 @@
 
   display: flex;
   flex-direction: column;
-  min-height: 360px;
+  min-height: 200px;
   height: calc(100dvh - 4rem);
   color: var(--d-fg);
   font-family: var(--d-font);
@@ -884,8 +887,27 @@ span.dash-badge--secondary {
     display: inline-flex;
   }
   .dash-header__model,
-  .dash-conn__label {
+  .dash-conn__label,
+  .dash-hide-mobile,
+  .dash-brand__version {
     display: none;
+  }
+  .dash-show-mobile {
+    display: inline;
+  }
+  .dash-header {
+    flex-wrap: nowrap;
+    padding: 0.35rem 0.5rem;
+    min-height: 2.75rem;
+  }
+  .dash-header__ctx {
+    flex: 1;
+  }
+  .dash-select select {
+    max-width: 9rem;
+  }
+  .dash-convo__title {
+    padding-top: 0.25rem;
   }
   .dash-sidebar {
     position: absolute;

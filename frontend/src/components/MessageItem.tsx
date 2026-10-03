@@ -1,7 +1,30 @@
 import { Markdown, safeImageSrc } from "../lib/markdown";
 import type { ContentPart, Message } from "../lib/types";
 import { toMs } from "../lib/util";
+import type { ToolStatus } from "../lib/runState";
 import { ToolCard } from "./ToolCard";
+
+/** Status of a *recorded* tool call, derived only from the result Hermes stored. */
+export function historicToolStatus(result: string | undefined): ToolStatus {
+  if (result === undefined) return "completed";
+  const text = result.trim();
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const o = parsed as Record<string, unknown>;
+      const err = typeof o.error === "string" ? o.error : o.error ? String(o.error) : "";
+      if (/denied by user|not consented|blocked/i.test(err)) return "denied";
+      if (err) return "failed";
+      if (typeof o.exit_code === "number" && o.exit_code !== 0) return "failed";
+      if (o.success === false || o.ok === false) return "failed";
+      return "completed";
+    }
+  } catch {
+    /* plain-text result */
+  }
+  if (/^(BLOCKED|denied)\b/i.test(text)) return "denied";
+  return /^(error|failed)\b/i.test(text) ? "failed" : "completed";
+}
 
 interface Props {
   message: Message;
@@ -57,7 +80,7 @@ export function MessageItem({ message, toolResults, showReasoning, showToolDetai
   if (message.role === "tool") {
     return (
       <div className="dash-msg dash-msg--tool">
-        <ToolCard tool={message.tool_name || "tool"} status="completed" result={text} showDetails={showToolDetails} />
+        <ToolCard tool={message.tool_name || "tool"} status={historicToolStatus(text)} result={text} showDetails={showToolDetails} />
       </div>
     );
   }
@@ -83,7 +106,7 @@ export function MessageItem({ message, toolResults, showReasoning, showToolDetai
           <ToolCard
             key={call.id ?? i}
             tool={call.name}
-            status={result ? (/^(error|failed)/i.test(resultText ?? "") ? "failed" : "completed") : "completed"}
+            status={historicToolStatus(resultText)}
             args={call.arguments}
             result={resultText}
             showDetails={showToolDetails}
