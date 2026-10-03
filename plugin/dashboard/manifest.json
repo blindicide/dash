@@ -3,7 +3,7 @@
   "label": "\\ dash",
   "description": "dash (\\) — persistent web companion interface for Hermes Agent. Hermes remains the agent; dash is another presentation layer.",
   "icon": "MessageSquare",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "tab": {
     "path": "/dash",
     "position": "after:chat"
