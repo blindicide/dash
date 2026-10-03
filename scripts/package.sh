@@ -43,7 +43,8 @@ cp plugin/dashboard/dash_bff/*.py "$STAGE/dash/dashboard/dash_bff/"
 cp plugin/dashboard/dist/index.js plugin/dashboard/dist/style.css "$STAGE/dash/dashboard/dist/"
 cp scripts/install.sh "$STAGE/install.sh"
 cp README.md LICENSE CHANGELOG.md SECURITY.md "$STAGE/"
-cp docs/*.md "$STAGE/docs/"
+# Only committed docs (never a stray untracked note).
+git ls-files -z -- 'docs/*.md' | xargs -0 -I{} cp {} "$STAGE/docs/"
 chmod 755 "$STAGE/install.sh"
 
 # Secret / junk guard on the staged tree.
